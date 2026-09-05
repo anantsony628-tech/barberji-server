@@ -519,9 +519,9 @@ app.post("/send-booking-status-notification", async (req, res) => {
         // =================================================
 
         const response =
-            await admin
-                .messaging()
-                .send(message);
+    await require("firebase-admin/messaging")
+        .getMessaging()
+        .send(message);
 
 
         console.log(
