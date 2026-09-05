@@ -192,6 +192,184 @@ app.post("/send-booking-notification", async (req, res) => {
     }
 });
 
+// =========================================================
+// BOOKING STATUS NOTIFICATION
+// CUSTOMER / PARTNER
+// =========================================================
+
+app.post("/send-booking-status-notification", async (req, res) => {
+    try {
+
+        const {
+            recipientType,
+            customerId,
+            partnerId,
+            salonId,
+            bookingId,
+            customerName,
+            serviceName,
+            bookingDate,
+            bookingTime,
+            newDate,
+            newTime,
+            status
+        } = req.body;
+
+        if (!recipientType || !bookingId || !status) {
+            return res.status(400).json({
+                success: false,
+                message: "Missing required fields"
+            });
+        }
+
+        let token = null;
+
+        // =====================================================
+        // CUSTOMER TOKEN
+        // =====================================================
+
+        if (recipientType === "CUSTOMER") {
+
+            if (!customerId) {
+                return res.status(400).json({
+                    success: false,
+                    message: "customerId required"
+                });
+            }
+
+            const snapshot = await db
+                .ref(`BarberJi/FCMTokens/Customers/${customerId}/token`)
+                .once("value");
+
+            token = snapshot.val();
+        }
+
+        // =====================================================
+        // PARTNER TOKEN
+        // =====================================================
+
+        else if (recipientType === "PARTNER") {
+
+            if (!partnerId || !salonId) {
+                return res.status(400).json({
+                    success: false,
+                    message: "partnerId and salonId required"
+                });
+            }
+
+            const snapshot = await db
+                .ref(`BarberJi/FCMTokens/Partners/${partnerId}/${salonId}/token`)
+                .once("value");
+
+            token = snapshot.val();
+        }
+
+        else {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid recipientType"
+            });
+        }
+
+        if (!token) {
+            return res.status(404).json({
+                success: false,
+                message: "FCM token not found"
+            });
+        }
+
+        // =====================================================
+        // NOTIFICATION TEXT
+        // =====================================================
+
+        let title = "Barber Ji";
+        let body = "";
+
+        switch (status) {
+
+            case "ACCEPTED":
+                body = `Booking Accepted${serviceName ? " - " + serviceName : ""}`;
+                break;
+
+            case "REJECTED":
+                body = `Booking Rejected${serviceName ? " - " + serviceName : ""}`;
+                break;
+
+            case "RESCHEDULED":
+                body = `Booking Rescheduled to ${newDate || bookingDate} ${newTime || bookingTime}`;
+                break;
+
+            case "SERVICE_STARTED":
+                body = `Service Started${serviceName ? " - " + serviceName : ""}`;
+                break;
+
+            case "SERVICE_COMPLETED":
+                body = `Service Completed${serviceName ? " - " + serviceName : ""}`;
+                break;
+
+            case "CANCELLED":
+                body = `Booking Cancelled${serviceName ? " - " + serviceName : ""}`;
+                break;
+
+            default:
+                body = `Booking status updated: ${status}`;
+        }
+
+        // =====================================================
+        // FCM MESSAGE
+        // =====================================================
+
+        const message = {
+            token: token,
+
+            notification: {
+                title: title,
+                body: body
+            },
+
+            data: {
+                type: "BOOKING_STATUS",
+                bookingId: String(bookingId),
+                status: String(status),
+
+                customerId: customerId ? String(customerId) : "",
+                partnerId: partnerId ? String(partnerId) : "",
+                salonId: salonId ? String(salonId) : "",
+
+                customerName: customerName ? String(customerName) : "",
+                serviceName: serviceName ? String(serviceName) : "",
+
+                bookingDate: bookingDate ? String(bookingDate) : "",
+                bookingTime: bookingTime ? String(bookingTime) : "",
+
+                newDate: newDate ? String(newDate) : "",
+                newTime: newTime ? String(newTime) : ""
+            }
+        };
+
+        const response =
+            await require("firebase-admin/messaging")
+                .getMessaging()
+                .send(message);
+
+        console.log("Booking status notification sent:", response);
+
+        return res.json({
+            success: true,
+            message: "Booking status notification sent ✅",
+            messageId: response
+        });
+
+    } catch (error) {
+
+        console.error("Booking status notification error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
 // ==========================================
 // START SERVER
 // ==========================================
