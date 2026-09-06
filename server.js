@@ -303,6 +303,12 @@ app.post("/send-booking-status-notification", async (req, res) => {
                 body = `Service Started${serviceName ? " - " + serviceName : ""}`;
                 break;
 
+                case "NEXT_CUSTOMER":
+    body =
+        `🔔 आपका नंबर आने वाला है` +
+        `${bookingTime ? " | कृपया Salon पर पहुँचें" : ""}`;
+    break;
+
             case "SERVICE_COMPLETED":
                 body = `Service Completed${serviceName ? " - " + serviceName : ""}`;
                 break;
