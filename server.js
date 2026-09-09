@@ -641,6 +641,15 @@ app.post("/customer-mobile-login", async (req, res) => {
     }
 
 });
+
+// ==========================================
+// FIREBASE WEB API KEY CHECK
+// ==========================================
+
+console.log(
+    "FIREBASE_WEB_API_KEY loaded:",
+    !!process.env.FIREBASE_WEB_API_KEY
+);
 // ==========================================
 // START SERVER
 // ==========================================
