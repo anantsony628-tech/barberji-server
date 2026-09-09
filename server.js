@@ -552,16 +552,23 @@ app.post("/customer-mobile-login", async (req, res) => {
 
         if (!authResponse.ok) {
 
-            console.log(
-                "Firebase login failed:",
-                authData
-            );
+    console.log(
+        "Firebase login failed:",
+        authData
+    );
 
-            return res.status(401).json({
-                success: false,
-                message: "Wrong Password"
-            });
-        }
+    const firebaseError =
+        authData &&
+        authData.error &&
+        authData.error.message
+            ? authData.error.message
+            : "UNKNOWN_AUTH_ERROR";
+
+    return res.status(401).json({
+        success: false,
+        message: firebaseError
+    });
+}
 
         // -------------------------------------------------
         // VERIFY UID
