@@ -596,9 +596,9 @@ app.post("/customer-mobile-login", async (req, res) => {
         // -------------------------------------------------
 
         const customToken =
-            await admin
-                .auth()
-                .createCustomToken(customer.uid);
+    await require("firebase-admin/auth")
+        .getAuth()
+        .createCustomToken(customer.uid);
 
         // -------------------------------------------------
         // SUCCESS
