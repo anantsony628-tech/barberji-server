@@ -584,10 +584,351 @@ app.post("/customer-mobile-login", async (req, res) => {
                 authData.localId,
                 customer.uid
             );
+// =========================================================
+// CUSTOMER MOBILE + PASSWORD LOGIN
+// =========================================================
+
+app.post("/customer-mobile-login", async (req, res) => {
+
+    try {
+
+        const {
+            mobile,
+            password,
+            email
+        } = req.body;
+
+        // -------------------------------------------------
+        // MOBILE REQUIRED
+        // -------------------------------------------------
+
+        if (!mobile) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Mobile number required"
+            });
+        }
+
+        const safeMobile =
+            String(mobile).trim();
+
+        // -------------------------------------------------
+        // FIND CUSTOMER(S) BY MOBILE
+        // -------------------------------------------------
+
+        const snapshot = await db
+            .ref("Customers")
+            .orderByChild("mobile")
+            .equalTo(safeMobile)
+            .once("value");
+
+        if (!snapshot.exists()) {
+
+            return res.status(404).json({
+                success: false,
+                message: "Mobile number not registered"
+            });
+        }
+
+        const customers = [];
+
+        snapshot.forEach(child => {
+
+            const data =
+                child.val() || {};
+
+            customers.push({
+
+                uid:
+                    child.key,
+
+                email:
+                    data.email || "",
+
+                customerId:
+                    data.customerId || "",
+
+                mobile:
+                    data.mobile || "",
+
+                name:
+                    data.name || "",
+
+                status:
+                    data.status || "ACTIVE"
+
+            });
+
+        });
+
+        // -------------------------------------------------
+        // MULTIPLE ACCOUNTS
+        // FIRST REQUEST:
+        // PASSWORD IS NOT VERIFIED
+        // -------------------------------------------------
+
+        if (
+            customers.length > 1 &&
+            (
+                !email ||
+                String(email).trim() === ""
+            )
+        ) {
+
+            console.log(
+                "Multiple customer accounts found for mobile:",
+                safeMobile
+            );
+
+            return res.json({
+
+                success:
+                    false,
+
+                multipleAccounts:
+                    true,
+
+                message:
+                    "Multiple accounts found",
+
+                accounts:
+                    customers.map(item => ({
+
+                        email:
+                            item.email,
+
+                        customerId:
+                            item.customerId,
+
+                        name:
+                            item.name
+
+                    }))
+
+            });
+        }
+
+        // -------------------------------------------------
+        // PASSWORD REQUIRED FOR ACTUAL LOGIN
+        // -------------------------------------------------
+
+        if (
+            !password ||
+            String(password).length === 0
+        ) {
+
+            return res.status(400).json({
+
+                success:
+                    false,
+
+                message:
+                    "Password required"
+
+            });
+        }
+
+        // -------------------------------------------------
+        // SELECT ACCOUNT
+        // -------------------------------------------------
+
+        let customer =
+            null;
+
+        if (
+            email &&
+            String(email).trim() !== ""
+        ) {
+
+            const selectedEmail =
+                String(email)
+                    .trim()
+                    .toLowerCase();
+
+            customer =
+                customers.find(
+                    item =>
+                        String(item.email)
+                            .trim()
+                            .toLowerCase()
+                        === selectedEmail
+                );
+
+            if (!customer) {
+
+                return res.status(404).json({
+
+                    success:
+                        false,
+
+                    message:
+                        "Selected account not found"
+
+                });
+            }
+
+        } else {
+
+            // -------------------------------------------------
+            // ONLY ONE ACCOUNT
+            // -------------------------------------------------
+
+            customer =
+                customers[0];
+        }
+
+        // -------------------------------------------------
+        // CUSTOMER EMAIL REQUIRED
+        // -------------------------------------------------
+
+        if (!customer.email) {
+
+            return res.status(400).json({
+
+                success:
+                    false,
+
+                message:
+                    "Customer email not available"
+
+            });
+        }
+
+        // -------------------------------------------------
+        // ACCOUNT STATUS CHECK
+        // -------------------------------------------------
+
+        if (
+            customer.status &&
+            customer.status.toUpperCase() !== "ACTIVE"
+        ) {
+
+            return res.status(403).json({
+
+                success:
+                    false,
+
+                message:
+                    "Customer account is not active"
+
+            });
+        }
+
+        // -------------------------------------------------
+        // FIREBASE WEB API KEY
+        // -------------------------------------------------
+
+        const firebaseApiKey =
+            process.env.FIREBASE_WEB_API_KEY;
+
+        if (!firebaseApiKey) {
+
+            console.error(
+                "FIREBASE_WEB_API_KEY is missing"
+            );
+
+            return res.status(500).json({
+
+                success:
+                    false,
+
+                message:
+                    "Server configuration error"
+
+            });
+        }
+
+        // -------------------------------------------------
+        // VERIFY EMAIL + PASSWORD
+        // -------------------------------------------------
+
+        const authResponse =
+            await fetch(
+                `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${firebaseApiKey}`,
+                {
+
+                    method:
+                        "POST",
+
+                    headers: {
+
+                        "Content-Type":
+                            "application/json"
+
+                    },
+
+                    body:
+                        JSON.stringify({
+
+                            email:
+                                customer.email,
+
+                            password:
+                                password,
+
+                            returnSecureToken:
+                                true
+
+                        })
+                }
+            );
+
+        const authData =
+            await authResponse.json();
+
+        // -------------------------------------------------
+        // WRONG PASSWORD / AUTH ERROR
+        // -------------------------------------------------
+
+        if (!authResponse.ok) {
+
+            console.log(
+                "Firebase login failed:",
+                authData
+            );
+
+            const firebaseError =
+                authData &&
+                authData.error &&
+                authData.error.message
+                    ? authData.error.message
+                    : "UNKNOWN_AUTH_ERROR";
 
             return res.status(401).json({
-                success: false,
-                message: "Account verification failed"
+
+                success:
+                    false,
+
+                message:
+                    firebaseError
+
+            });
+        }
+
+        // -------------------------------------------------
+        // VERIFY UID
+        // -------------------------------------------------
+
+        if (
+            authData.localId &&
+            authData.localId !== customer.uid
+        ) {
+
+            console.error(
+                "UID mismatch:",
+                authData.localId,
+                customer.uid
+            );
+
+            return res.status(401).json({
+
+                success:
+                    false,
+
+                message:
+                    "Account verification failed"
+
             });
         }
 
@@ -596,9 +937,11 @@ app.post("/customer-mobile-login", async (req, res) => {
         // -------------------------------------------------
 
         const customToken =
-    await require("firebase-admin/auth")
-        .getAuth()
-        .createCustomToken(customer.uid);
+            await require("firebase-admin/auth")
+                .getAuth()
+                .createCustomToken(
+                    customer.uid
+                );
 
         // -------------------------------------------------
         // SUCCESS
@@ -612,21 +955,29 @@ app.post("/customer-mobile-login", async (req, res) => {
 
         return res.json({
 
-            success: true,
+            success:
+                true,
 
-            multipleAccounts: false,
+            multipleAccounts:
+                false,
 
-            customToken: customToken,
+            customToken:
+                customToken,
 
-            uid: customer.uid,
+            uid:
+                customer.uid,
 
-            email: customer.email,
+            email:
+                customer.email,
 
-            mobile: customer.mobile,
+            mobile:
+                customer.mobile,
 
-            customerId: customer.customerId,
+            customerId:
+                customer.customerId,
 
-            name: customer.name
+            name:
+                customer.name
 
         });
 
@@ -639,12 +990,13 @@ app.post("/customer-mobile-login", async (req, res) => {
 
         return res.status(500).json({
 
-            success: false,
+            success:
+                false,
 
-            message: "Server error"
+            message:
+                "Server error"
 
         });
-
     }
 
 });
