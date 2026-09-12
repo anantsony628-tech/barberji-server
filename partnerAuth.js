@@ -587,7 +587,277 @@ router.post(
         }
     }
 );
+// =========================================================
+// PARTNER GOOGLE LOGIN
+//
+// IMPORTANT:
+// - Google credential directly Firebase Auth me login nahi karega
+// - Google ID Token Render server par verify hoga
+// - PartnerAuth ke email se Partner account identify hoga
+// - Approved salon verify hone ke baad Firebase Custom Token milega
+// - Customer Auth ko touch nahi karta
+// =========================================================
 
+router.post(
+    "/google-login",
+    async (req, res) => {
+
+        try {
+
+            const idToken =
+                clean(req.body.idToken);
+
+            // =============================================
+            // BASIC VALIDATION
+            // =============================================
+
+            if (!idToken) {
+
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Google ID Token required"
+                });
+            }
+
+            // =============================================
+            // VERIFY GOOGLE ID TOKEN
+            //
+            // Firebase Admin Google ID token verify karega.
+            // Isse Google account ki identity verify hogi.
+            // =============================================
+
+            const decodedToken =
+                await auth.verifyIdToken(
+                    idToken
+                );
+
+            const googleEmail =
+                clean(
+                    decodedToken.email
+                ).toLowerCase();
+
+            const emailVerified =
+                decodedToken.email_verified === true;
+
+            if (!googleEmail) {
+
+                return res.status(401).json({
+                    success: false,
+                    message:
+                        "Google email nahi mila"
+                });
+            }
+
+            if (!emailVerified) {
+
+                return res.status(403).json({
+                    success: false,
+                    message:
+                        "Google email verified nahi hai"
+                });
+            }
+
+            // =============================================
+            // FIND PARTNER ACCOUNT BY EMAIL
+            // =============================================
+
+            const partnerSnapshot =
+                await db
+                    .ref("PartnerAuth")
+                    .orderByChild("email")
+                    .equalTo(googleEmail)
+                    .once("value");
+
+            if (!partnerSnapshot.exists()) {
+
+                return res.status(401).json({
+                    success: false,
+                    message:
+                        "This Google email is not registered as a Partner"
+                });
+            }
+
+            let partnerData = null;
+            let partnerAuthUid = null;
+
+            partnerSnapshot.forEach(
+                child => {
+
+                    if (!partnerData) {
+
+                        partnerData =
+                            child.val();
+
+                        partnerAuthUid =
+                            child.key;
+                    }
+                }
+            );
+
+            if (
+                !partnerData ||
+                !partnerAuthUid
+            ) {
+
+                return res.status(401).json({
+                    success: false,
+                    message:
+                        "Partner account invalid hai"
+                });
+            }
+
+            // =============================================
+            // ACCOUNT STATUS
+            // =============================================
+
+            if (
+                partnerData.status &&
+                partnerData.status !== "ACTIVE"
+            ) {
+
+                return res.status(403).json({
+                    success: false,
+                    message:
+                        "Partner account disabled hai"
+                });
+            }
+
+            // =============================================
+            // SALON ID
+            // =============================================
+
+            const salonId =
+                clean(
+                    partnerData.salonId
+                );
+
+            if (!salonId) {
+
+                return res.status(403).json({
+                    success: false,
+                    message:
+                        "Salon ID nahi mila"
+                });
+            }
+
+            // =============================================
+            // CHECK APPROVED SALON
+            // =============================================
+
+            const salonSnapshot =
+                await db
+                    .ref("ApprovedSalons")
+                    .child(salonId)
+                    .once("value");
+
+            if (!salonSnapshot.exists()) {
+
+                return res.status(403).json({
+                    success: false,
+                    message:
+                        "Salon abhi approved nahi hai"
+                });
+            }
+
+            const approvedSalon =
+                salonSnapshot.val() || {};
+
+            const approvalStatus =
+                clean(
+                    approvedSalon.approvalStatus
+                ).toUpperCase();
+
+            if (
+                approvalStatus &&
+                approvalStatus !== "APPROVED"
+            ) {
+
+                return res.status(403).json({
+                    success: false,
+                    message:
+                        "Salon abhi approved nahi hai"
+                });
+            }
+
+            // =============================================
+            // CREATE PARTNER FIREBASE CUSTOM TOKEN
+            // =============================================
+
+            const customToken =
+                await auth.createCustomToken(
+                    partnerAuthUid,
+                    {
+                        role:
+                            "partner",
+
+                        partnerId:
+                            partnerData.partnerId,
+
+                        salonId:
+                            partnerData.salonId
+                    }
+                );
+
+            // =============================================
+            // SUCCESS
+            // =============================================
+
+            return res.status(200).json({
+
+                success:
+                    true,
+
+                message:
+                    "Partner Google login successful",
+
+                customToken:
+                    customToken,
+
+                authUid:
+                    partnerAuthUid,
+
+                partnerId:
+                    partnerData.partnerId,
+
+                salonId:
+                    partnerData.salonId,
+
+                mobile:
+                    partnerData.mobile,
+
+                email:
+                    partnerData.email,
+
+                salonName:
+                    approvedSalon.salonName ||
+                    approvedSalon.name ||
+                    "",
+
+                ownerName:
+                    approvedSalon.ownerName ||
+                    approvedSalon.owner_name ||
+                    ""
+            });
+
+        } catch (error) {
+
+            console.error(
+                "PARTNER GOOGLE LOGIN ERROR:",
+                error
+            );
+
+            return res.status(401).json({
+
+                success:
+                    false,
+
+                message:
+                    "Google Partner authentication failed"
+            });
+        }
+    }
+);
 // =========================================================
 // EXPORT ROUTER
 // =========================================================
