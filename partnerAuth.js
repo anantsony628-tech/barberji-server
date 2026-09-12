@@ -21,8 +21,11 @@ const router = express.Router();
 const db =
     getDatabase();
 
+const { getAuth } =
+    require("firebase-admin/auth");
+
 const auth =
-    admin.auth();
+    getAuth();
 
 // =========================================================
 // HELPER
