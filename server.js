@@ -797,7 +797,17 @@ app.post("/customer-mobile-login", async (req, res) => {
 });
         
 
-        
+        // =========================================================
+// PARTNER AUTH ROUTES
+// =========================================================
+
+const partnerAuth =
+    require("./partnerAuth");
+
+app.use(
+    "/partner",
+    partnerAuth
+);
 
 // ==========================================
 // FIREBASE WEB API KEY CHECK
