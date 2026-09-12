@@ -18,11 +18,12 @@ const router = express.Router();
 
 let firebaseApp;
 
-if (admin.apps.length > 0) {
+try {
 
-    firebaseApp = admin.app();
+    firebaseApp =
+        admin.app();
 
-} else {
+} catch (error) {
 
     const serviceAccount =
         require("./firebase-key.json");
