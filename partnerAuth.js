@@ -9,40 +9,20 @@ const bcrypt = require("bcryptjs");
 
 const router = express.Router();
 
+
 // =========================================================
 // FIREBASE ADMIN
 //
-// server.js agar already Firebase initialize kar chuka hai,
-// to yahan dobara initialize nahi hoga.
+// server.js already Firebase initialize kar chuka hai.
+// Partner Auth existing Firebase Admin instance reuse karega.
+// Dobara initialize nahi karega.
 // =========================================================
 
-let firebaseApp;
-
-try {
-
-    firebaseApp =
-        admin.app();
-
-} catch (error) {
-
-    const serviceAccount =
-        require("./firebase-key.json");
-
-    firebaseApp =
-        admin.initializeApp({
-            credential:
-                admin.cert(serviceAccount),
-
-            databaseURL:
-                "https://barber-ji-default-rtdb.asia-southeast1.firebasedatabase.app"
-        });
-}
-
 const db =
-    getDatabase(firebaseApp);
+    getDatabase();
 
 const auth =
-    admin.auth(firebaseApp);
+    admin.auth();
 
 // =========================================================
 // HELPER
