@@ -809,6 +809,18 @@ app.use(
     partnerAuth
 );
 
+// =========================================================
+// PARTNER PASSWORD RESET ROUTES
+// =========================================================
+
+const partnerForgotPassword =
+    require("./partnerForgotPassword");
+
+app.use(
+    "/partner-forgot",
+    partnerForgotPassword
+);
+
 // ==========================================
 // FIREBASE WEB API KEY CHECK
 // ==========================================
