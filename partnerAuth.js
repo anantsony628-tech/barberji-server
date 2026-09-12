@@ -2,6 +2,8 @@ const express = require("express");
 const admin = require("firebase-admin");
 const { getDatabase } = require("firebase-admin/database");
 const bcrypt = require("bcryptjs");
+const { OAuth2Client } =
+    require("google-auth-library");
 
 // =========================================================
 // PARTNER AUTH ROUTER
@@ -26,6 +28,11 @@ const { getAuth } =
 
 const auth =
     getAuth();
+
+const googleClient =
+    new OAuth2Client(
+        process.env.GOOGLE_WEB_CLIENT_ID
+    );
 
 // =========================================================
 // HELPER
@@ -627,18 +634,38 @@ router.post(
             // Isse Google account ki identity verify hogi.
             // =============================================
 
-            const decodedToken =
-                await auth.verifyIdToken(
-                    idToken
-                );
+            // =============================================
+// VERIFY GOOGLE OAUTH ID TOKEN
+// =============================================
 
-            const googleEmail =
-                clean(
-                    decodedToken.email
-                ).toLowerCase();
+const ticket =
+    await googleClient.verifyIdToken({
+        idToken:
+            idToken,
 
-            const emailVerified =
-                decodedToken.email_verified === true;
+        audience:
+            process.env.GOOGLE_WEB_CLIENT_ID
+    });
+
+const payload =
+    ticket.getPayload();
+
+if (!payload) {
+
+    return res.status(401).json({
+        success: false,
+        message:
+            "Google token invalid hai"
+    });
+}
+
+const googleEmail =
+    clean(
+        payload.email
+    ).toLowerCase();
+
+const emailVerified =
+    payload.email_verified === true;
 
             if (!googleEmail) {
 
