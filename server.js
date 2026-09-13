@@ -1,4 +1,5 @@
 const express = require("express");
+const path = require("path");
 const admin = require("firebase-admin");
 const { getDatabase } = require("firebase-admin/database");
 
@@ -25,6 +26,25 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json());
+
+// =========================================================
+// PARTNER PASSWORD RESET WEB PAGE
+// =========================================================
+
+app.get(
+    "/partner-reset.html",
+    (req, res) => {
+
+        res.sendFile(
+            path.join(
+                __dirname,
+                "public",
+                "partner-reset.html"
+            )
+        );
+
+    }
+);
 
 // ==========================================
 // TEST ROUTE
