@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Barber Ji - Partner Password Reset</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 420px;
+
+            background: #ffffff;
+
+            padding: 30px 24px;
+
+            border-radius: 14px;
+
+            box-shadow:
+                0 4px 20px rgba(0, 0, 0, 0.10);
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .logo h1 {
+            margin: 0;
+
+            font-size: 30px;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            text-align: center;
+
+            color: #666;
+
+            font-size: 14px;
+
+            margin-bottom: 25px;
+        }
+
+        h2 {
+            text-align: center;
+
+            margin-top: 0;
+            margin-bottom: 20px;
+
+            font-size: 22px;
+        }
+
+        label {
+            display: block;
+
+            margin-bottom: 7px;
+
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        input {
+            width: 100%;
+
+            padding: 13px;
+
+            border: 1px solid #cccccc;
+
+            border-radius: 8px;
+
+            font-size: 16px;
+
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #333333;
+        }
+
+        .field {
+            margin-bottom: 16px;
+        }
+
+        button {
+            width: 100%;
+
+            padding: 14px;
+
+            border: none;
+
+            border-radius: 8px;
+
+            background: #111111;
+            color: #ffffff;
+
+            font-size: 16px;
+            font-weight: 600;
+
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        #message {
+            display: none;
+
+            margin-top: 18px;
+
+            padding: 12px;
+
+            border-radius: 8px;
+
+            text-align: center;
+
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .success {
+            display: block !important;
+
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .error {
+            display: block !important;
+
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .info {
+            margin-top: 18px;
+
+            text-align: center;
+
+            font-size: 12px;
+
+            color: #777;
+
+            line-height: 1.5;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <div class="logo">
+        <h1>Barber Ji</h1>
+    </div>
+
+    <div class="subtitle">
+        Partner Account
+    </div>
+
+    <h2>Reset Password</h2>
+
+    <form id="resetForm">
+
+        <div class="field">
+
+            <label for="password">
+                New Password
+            </label>
+
+            <input
+                type="password"
+                id="password"
+                placeholder="Enter new password"
+                minlength="6"
+                required
+            >
+
+        </div>
+
+        <div class="field">
+
+            <label for="confirmPassword">
+                Confirm Password
+            </label>
+
+            <input
+                type="password"
+                id="confirmPassword"
+                placeholder="Confirm new password"
+                minlength="6"
+                required
+            >
+
+        </div>
+
+        <button
+            type="submit"
+            id="resetButton"
+        >
+            Reset Password
+        </button>
+
+    </form>
+
+    <div id="message"></div>
+
+    <div class="info">
+        This password reset link is valid for 15 minutes
+        and can only be used once.
+    </div>
+
+</div>
+
+
+<script>
+
+const API_BASE =
+    "https://barberji-server-1.onrender.com";
+
+
+// ==========================================
+// GET RESET TOKEN FROM URL
+// ==========================================
+
+const params =
+    new URLSearchParams(
+        window.location.search
+    );
+
+const token =
+    params.get("token");
+
+
+// ==========================================
+// ELEMENTS
+// ==========================================
+
+const form =
+    document.getElementById(
+        "resetForm"
+    );
+
+const passwordInput =
+    document.getElementById(
+        "password"
+    );
+
+const confirmPasswordInput =
+    document.getElementById(
+        "confirmPassword"
+    );
+
+const resetButton =
+    document.getElementById(
+        "resetButton"
+    );
+
+const message =
+    document.getElementById(
+        "message"
+    );
+
+
+// ==========================================
+// MESSAGE
+// ==========================================
+
+function showMessage(
+    text,
+    type
+) {
+
+    message.textContent =
+        text;
+
+    message.className =
+        type;
+
+}
+
+
+// ==========================================
+// TOKEN CHECK
+// ==========================================
+
+if (!token) {
+
+    showMessage(
+        "Invalid or missing password reset link.",
+        "error"
+    );
+
+    resetButton.disabled =
+        true;
+
+}
+
+
+// ==========================================
+// RESET PASSWORD
+// ==========================================
+
+form.addEventListener(
+    "submit",
+    async function (event) {
+
+        event.preventDefault();
+
+        if (!token) {
+
+            showMessage(
+                "Invalid password reset link.",
+                "error"
+            );
+
+            return;
+        }
+
+
+        const password =
+            passwordInput.value.trim();
+
+        const confirmPassword =
+            confirmPasswordInput.value.trim();
+
+
+        // ==================================
+        // PASSWORD VALIDATION
+        // ==================================
+
+        if (password.length < 6) {
+
+            showMessage(
+                "Password must be at least 6 characters.",
+                "error"
+            );
+
+            return;
+        }
+
+
+        if (
+            password !==
+            confirmPassword
+        ) {
+
+            showMessage(
+                "Passwords do not match.",
+                "error"
+            );
+
+            return;
+        }
+
+
+        // ==================================
+        // DISABLE BUTTON
+        // ==================================
+
+        resetButton.disabled =
+            true;
+
+        resetButton.textContent =
+            "Resetting...";
+
+
+        try {
+
+            const response =
+                await fetch(
+                    API_BASE +
+                    "/partner-forgot/reset-password",
+                    {
+
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body: JSON.stringify({
+
+                            token:
+                                token,
+
+                            newPassword:
+                                password
+
+                        })
+
+                    }
+                );
+
+
+            const data =
+                await response.json();
+
+
+            // ==================================
+            // ERROR
+            // ==================================
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.message ||
+                    "Unable to reset password."
+                );
+
+            }
+
+
+            // ==================================
+            // SUCCESS
+            // ==================================
+
+            showMessage(
+                "Password reset successfully. You can now login with your new password.",
+                "success"
+            );
+
+
+            form.style.display =
+                "none";
+
+
+        } catch (error) {
+
+            showMessage(
+                error.message ||
+                "Something went wrong. Please try again.",
+                "error"
+            );
+
+
+            resetButton.disabled =
+                false;
+
+            resetButton.textContent =
+                "Reset Password";
+
+        }
+
+    }
+);
+
+</script>
+
+</body>
+  </html>
