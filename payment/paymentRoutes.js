@@ -30,6 +30,12 @@ router.post(
     paymentController.createOrder
 );
 
+router.post(
+    "/create-payment-intent",
+    paymentAuth.verifyFirebaseUser,
+    paymentController.createPaymentIntent
+);
+
 
 // =========================================================
 // VERIFY RAZORPAY PAYMENT
