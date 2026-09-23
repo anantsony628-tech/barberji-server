@@ -4,11 +4,13 @@
 // Responsibility:
 // - Payment API requests handle karna
 // - Firebase authenticated customer se payment intent banana
-// - Existing Razorpay order/verification endpoints preserve karna
+// - Razorpay payment verify karna
+// - Verified payment ke baad final booking create karna
 //
 // IMPORTANT:
 // - Actual booking amount client se trust nahi kiya jayega
 // - New payment-intent flow backend service se amount calculate karega
+// - Final booking sirf verified PaymentIntent se banegi
 // =========================================================
 
 const paymentService =
@@ -16,6 +18,9 @@ const paymentService =
 
 const paymentIntentService =
     require("./paymentIntentService");
+
+const paymentBookingService =
+    require("./paymentBookingService");
 
 
 // =========================================================
@@ -103,6 +108,7 @@ async function createOrder(req, res) {
 // NEW CREATE PAYMENT INTENT
 // =========================================================
 // Production payment flow:
+//
 // Android
 //    ↓
 // create-payment-intent
@@ -349,25 +355,77 @@ async function createPaymentIntent(req, res) {
 
 
 // =========================================================
-// VERIFY PAYMENT
+// VERIFY PAYMENT + FINALIZE BOOKING
 // =========================================================
-// Existing endpoint preserved for now.
-// Final production verification will additionally
-// validate PaymentIntent before booking completion.
+// Production flow:
+//
+// Android
+//    ↓
+// Razorpay success
+//    ↓
+// /verify-payment
+//    ↓
+// Firebase authenticated user verify
+//    ↓
+// PaymentIntent load
+//    ↓
+// PaymentIntent owner check
+//    ↓
+// Razorpay Order ID match
+//    ↓
+// Razorpay signature verify
+//    ↓
+// Final Booking create
+//    ↓
+// OTP + Token return
 // =========================================================
 
 async function verifyPayment(req, res) {
 
     try {
 
+        // -------------------------------------------------
+        // AUTHENTICATED USER
+        // -------------------------------------------------
+
+        const user =
+            req.user || {};
+
+
+        const authUid =
+            user.uid
+                ? String(user.uid)
+                : "";
+
+
+        if (!authUid) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                verified: false,
+
+                message:
+                    "Customer authentication required"
+            });
+        }
+
+
+        // -------------------------------------------------
+        // REQUEST DATA
+        // -------------------------------------------------
+
         const {
+            paymentIntentId,
             razorpayOrderId,
             razorpayPaymentId,
             razorpaySignature
         } = req.body || {};
 
 
-        if (!razorpayOrderId ||
+        if (!paymentIntentId ||
+            !razorpayOrderId ||
             !razorpayPaymentId ||
             !razorpaySignature) {
 
@@ -375,11 +433,154 @@ async function verifyPayment(req, res) {
 
                 success: false,
 
+                verified: false,
+
                 message:
                     "Payment verification data is incomplete"
             });
         }
 
+
+        // -------------------------------------------------
+        // LOAD STORED PAYMENT INTENT
+        // -------------------------------------------------
+
+        const paymentIntent =
+            await paymentIntentService
+                .getPaymentIntent(
+                    paymentIntentId
+                );
+
+
+        if (!paymentIntent) {
+
+            return res.status(404).json({
+
+                success: false,
+
+                verified: false,
+
+                message:
+                    "Payment intent not found"
+            });
+        }
+
+
+        // -------------------------------------------------
+        // PAYMENT INTENT OWNER CHECK
+        // -------------------------------------------------
+        // Important:
+        // Kisi dusre customer ka PaymentIntent use
+        // karke booking create nahi ki ja sakti.
+        // -------------------------------------------------
+
+        const intentAuthUid =
+            paymentIntent.authUid
+                ? String(paymentIntent.authUid)
+                : "";
+
+
+        if (!intentAuthUid ||
+            intentAuthUid !== authUid) {
+
+            return res.status(403).json({
+
+                success: false,
+
+                verified: false,
+
+                message:
+                    "Payment intent does not belong to this customer"
+            });
+        }
+
+
+        // -------------------------------------------------
+        // PAYMENT INTENT STATUS CHECK
+        // -------------------------------------------------
+
+        if (
+            paymentIntent.status &&
+            paymentIntent.status !== "CREATED" &&
+            paymentIntent.status !== "BOOKED"
+        ) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                verified: false,
+
+                message:
+                    "Payment intent is not available for verification"
+            });
+        }
+
+
+        // -------------------------------------------------
+        // RAZORPAY ORDER ID CHECK
+        // -------------------------------------------------
+        // Client ka order ID stored server order ID
+        // se exactly match hona chahiye.
+        // -------------------------------------------------
+
+        const storedRazorpayOrderId =
+            paymentIntent.razorpayOrderId
+                ? String(
+                    paymentIntent.razorpayOrderId
+                )
+                : "";
+
+
+        if (!storedRazorpayOrderId ||
+            storedRazorpayOrderId !==
+                String(razorpayOrderId)) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                verified: false,
+
+                message:
+                    "Razorpay order does not match payment intent"
+            });
+        }
+
+
+        // -------------------------------------------------
+        // STORED AMOUNT VALIDATION
+        // -------------------------------------------------
+        // Razorpay order amount server-created PaymentIntent
+        // ke amount ke saath match hona chahiye.
+        // -------------------------------------------------
+
+        const storedAmountPaise =
+            Number(
+                paymentIntent.razorpayAmountPaise
+            );
+
+
+        if (!Number.isSafeInteger(
+                storedAmountPaise
+            ) ||
+            storedAmountPaise <= 0) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                verified: false,
+
+                message:
+                    "Invalid stored payment amount"
+            });
+        }
+
+
+        // -------------------------------------------------
+        // RAZORPAY SIGNATURE VERIFICATION
+        // -------------------------------------------------
 
         const verified =
             paymentService
@@ -410,14 +611,71 @@ async function verifyPayment(req, res) {
         }
 
 
+        // -------------------------------------------------
+        // FINALIZE BOOKING
+        // -------------------------------------------------
+        // Important:
+        // Booking amount / commission / salon amount
+        // PaymentIntent se liya jayega.
+        //
+        // Client ke amount par trust nahi kiya jayega.
+        // -------------------------------------------------
+
+        const result =
+            await paymentBookingService
+                .finalizePaymentBooking({
+
+                    paymentIntent:
+                        paymentIntent,
+
+                    razorpayPaymentId:
+                        razorpayPaymentId
+                });
+
+
+        // -------------------------------------------------
+        // FINAL RESPONSE
+        // -------------------------------------------------
+
         return res.status(200).json({
 
-            success: true,
+            success:
+                result.success,
 
-            verified: true,
+            verified:
+                true,
+
+            duplicate:
+                result.duplicate || false,
 
             message:
-                "Payment signature verified"
+                result.duplicate
+                    ? "Payment already verified and booking exists"
+                    : "Payment verified and booking created",
+
+            paymentIntentId:
+                result.paymentIntentId,
+
+            bookingId:
+                result.bookingId,
+
+            paymentId:
+                result.paymentId,
+
+            tokenNo:
+                result.tokenNo,
+
+            otp:
+                result.otp,
+
+            bookingAmount:
+                result.bookingAmount,
+
+            commission:
+                result.commission,
+
+            salonAmount:
+                result.salonAmount
         });
 
     } catch (error) {
