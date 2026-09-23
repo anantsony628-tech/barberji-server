@@ -1,4 +1,6 @@
 const express = require("express");
+const paymentRoutes =
+    require("./payment/paymentRoutes");
 const path = require("path");
 const admin = require("firebase-admin");
 const { getDatabase } = require("firebase-admin/database");
@@ -26,6 +28,10 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json());
+app.use(
+    "/payment",
+    paymentRoutes
+);
 
 // =========================================================
 // PARTNER PASSWORD RESET WEB PAGE
