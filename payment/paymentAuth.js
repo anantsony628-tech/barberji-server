@@ -1,4 +1,5 @@
-const admin = require("firebase-admin");
+const { getAuth } =
+    require("firebase-admin/auth");
 
 
 // =========================================================
@@ -73,9 +74,8 @@ async function verifyFirebaseUser(req, res, next) {
         // -------------------------------------------------
 
         const decodedToken =
-            await admin
-                .auth()
-                .verifyIdToken(idToken);
+    await getAuth()
+        .verifyIdToken(idToken);
 
 
         // -------------------------------------------------
