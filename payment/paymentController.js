@@ -2,25 +2,28 @@
 // BARBER JI - PAYMENT CONTROLLER
 // =========================================================
 // Responsibility:
-// - Receive payment API requests
-// - Validate request data
-// - Call paymentService
-// - Return clean API responses
+// - Payment API requests handle karna
+// - Firebase authenticated customer se payment intent banana
+// - Existing Razorpay order/verification endpoints preserve karna
 //
-// This file does NOT:
-// - calculate commission
-// - process refund
-// - process payout
-// - directly call Razorpay
-// - update booking
+// IMPORTANT:
+// - Actual booking amount client se trust nahi kiya jayega
+// - New payment-intent flow backend service se amount calculate karega
 // =========================================================
 
 const paymentService =
     require("./paymentService");
 
+const paymentIntentService =
+    require("./paymentIntentService");
+
 
 // =========================================================
-// CREATE RAZORPAY ORDER
+// OLD CREATE ORDER
+// =========================================================
+// Existing endpoint preserved.
+// Future production flow mein new /create-payment-intent
+// endpoint use hoga.
 // =========================================================
 
 async function createOrder(req, res) {
@@ -34,34 +37,8 @@ async function createOrder(req, res) {
         } = req.body || {};
 
 
-        // =================================================
-        // BASIC AMOUNT VALIDATION
-        // =================================================
-
-        if (
-            amountPaise === undefined ||
-            amountPaise === null
-        ) {
-
-            return res.status(400).json({
-
-                success: false,
-
-                message:
-                    "Payment amount is required"
-
-            });
-        }
-
-
-        const numericAmount =
-            Number(amountPaise);
-
-
-        if (
-            !Number.isInteger(numericAmount) ||
-            numericAmount <= 0
-        ) {
+        if (!Number.isInteger(amountPaise) ||
+            amountPaise <= 0) {
 
             return res.status(400).json({
 
@@ -69,19 +46,12 @@ async function createOrder(req, res) {
 
                 message:
                     "Invalid payment amount"
-
             });
         }
 
 
-        // =================================================
-        // RECEIPT VALIDATION
-        // =================================================
-
-        if (
-            !receipt ||
-            String(receipt).trim() === ""
-        ) {
+        if (!receipt ||
+            String(receipt).trim() === "") {
 
             return res.status(400).json({
 
@@ -89,58 +59,30 @@ async function createOrder(req, res) {
 
                 message:
                     "Payment receipt is required"
-
             });
         }
 
-
-        // =================================================
-        // CREATE RAZORPAY ORDER
-        // =================================================
 
         const result =
             await paymentService.createOrder({
 
                 amountPaise:
-                    numericAmount,
+                    amountPaise,
 
                 receipt:
-                    String(receipt).trim(),
+                    receipt,
 
                 notes:
-                    notes &&
-                    typeof notes === "object"
-                        ? notes
-                        : {}
-
+                    notes
             });
 
 
-        return res.status(201).json({
-
-            success: true,
-
-            orderId:
-                result.orderId,
-
-            amountPaise:
-                result.amountPaise,
-
-            currency:
-                result.currency,
-
-            status:
-                result.status,
-
-            receipt:
-                result.receipt
-
-        });
+        return res.status(200).json(result);
 
     } catch (error) {
 
         console.error(
-            "Create payment order error:",
+            "Payment create-order error:",
             error
         );
 
@@ -152,29 +94,266 @@ async function createOrder(req, res) {
             message:
                 error.message ||
                 "Unable to create payment order"
-
         });
-
     }
 }
 
 
 // =========================================================
-// VERIFY RAZORPAY PAYMENT
+// NEW CREATE PAYMENT INTENT
 // =========================================================
-// Android se milne wale:
-//
-// razorpay_order_id
-// razorpay_payment_id
-// razorpay_signature
-//
-// ko backend par verify kiya jayega.
-//
-// IMPORTANT:
-// Sirf successful verification ke baad hi
-// future mein booking ko payment-confirmed maana jayega.
-//
-// Abhi ye endpoint booking update nahi karta.
+// Production payment flow:
+// Android
+//    ↓
+// create-payment-intent
+//    ↓
+// Firebase Services verification
+//    ↓
+// Actual price calculation
+//    ↓
+// Commission calculation
+//    ↓
+// Razorpay Order
+//    ↓
+// PaymentIntent saved
+// =========================================================
+
+async function createPaymentIntent(req, res) {
+
+    try {
+
+        const user =
+            req.user || {};
+
+
+        const authUid =
+            user.uid
+                ? String(user.uid)
+                : "";
+
+
+        if (!authUid) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message:
+                    "Customer authentication required"
+            });
+        }
+
+
+        const body =
+            req.body || {};
+
+
+        const customerId =
+            body.customerId;
+
+
+        const customerName =
+            body.customerName;
+
+
+        const customerMobile =
+            body.customerMobile;
+
+
+        const salonId =
+            body.salonId;
+
+
+        const partnerId =
+            body.partnerId;
+
+
+        const salonName =
+            body.salonName;
+
+
+        const ownerMobile =
+            body.ownerMobile;
+
+
+        const serviceIds =
+            body.serviceIds;
+
+
+        const bookingDate =
+            body.bookingDate;
+
+
+        const bookingTime =
+            body.bookingTime;
+
+
+        const tokenNo =
+            body.tokenNo;
+
+
+        // -------------------------------------------------
+        // BASIC INPUT VALIDATION
+        // -------------------------------------------------
+
+        if (!customerId) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    "Customer ID is required"
+            });
+        }
+
+
+        if (!salonId) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    "Salon ID is required"
+            });
+        }
+
+
+        if (!partnerId) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    "Partner ID is required"
+            });
+        }
+
+
+        if (!salonName) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    "Salon name is required"
+            });
+        }
+
+
+        if (!serviceIds) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    "Service IDs are required"
+            });
+        }
+
+
+        if (!bookingDate) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    "Booking date is required"
+            });
+        }
+
+
+        if (!bookingTime) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    "Booking time is required"
+            });
+        }
+
+
+        // -------------------------------------------------
+        // CREATE PAYMENT INTENT
+        // -------------------------------------------------
+
+        const result =
+            await paymentIntentService
+                .createPaymentIntent({
+
+                    authUid:
+                        authUid,
+
+                    customerId:
+                        customerId,
+
+                    customerName:
+                        customerName,
+
+                    customerMobile:
+                        customerMobile,
+
+                    salonId:
+                        salonId,
+
+                    partnerId:
+                        partnerId,
+
+                    salonName:
+                        salonName,
+
+                    ownerMobile:
+                        ownerMobile,
+
+                    serviceIds:
+                        serviceIds,
+
+                    bookingDate:
+                        bookingDate,
+
+                    bookingTime:
+                        bookingTime,
+
+                    tokenNo:
+                        tokenNo
+                });
+
+
+        return res.status(200).json(result);
+
+    } catch (error) {
+
+        console.error(
+            "Payment intent creation error:",
+            error
+        );
+
+
+        return res.status(500).json({
+
+            success: false,
+
+            message:
+                error.message ||
+                "Unable to create payment intent"
+        });
+    }
+}
+
+
+// =========================================================
+// VERIFY PAYMENT
+// =========================================================
+// Existing endpoint preserved for now.
+// Final production verification will additionally
+// validate PaymentIntent before booking completion.
 // =========================================================
 
 async function verifyPayment(req, res) {
@@ -188,92 +367,34 @@ async function verifyPayment(req, res) {
         } = req.body || {};
 
 
-        // =================================================
-        // REQUIRED FIELD CHECK
-        // =================================================
-
-        if (
-            !razorpayOrderId ||
-            String(razorpayOrderId).trim() === ""
-        ) {
-
-            return res.status(400).json({
-
-                success: false,
-
-                verified: false,
-
-                message:
-                    "Razorpay order ID is required"
-
-            });
-        }
-
-
-        if (
+        if (!razorpayOrderId ||
             !razorpayPaymentId ||
-            String(razorpayPaymentId).trim() === ""
-        ) {
+            !razorpaySignature) {
 
             return res.status(400).json({
 
                 success: false,
 
-                verified: false,
-
                 message:
-                    "Razorpay payment ID is required"
-
+                    "Payment verification data is incomplete"
             });
         }
 
-
-        if (
-            !razorpaySignature ||
-            String(razorpaySignature).trim() === ""
-        ) {
-
-            return res.status(400).json({
-
-                success: false,
-
-                verified: false,
-
-                message:
-                    "Razorpay payment signature is required"
-
-            });
-        }
-
-
-        // =================================================
-        // VERIFY SIGNATURE
-        // =================================================
 
         const verified =
-            paymentService.verifyPaymentSignature({
+            paymentService
+                .verifyPaymentSignature({
 
-                orderId:
-                    String(
-                        razorpayOrderId
-                    ).trim(),
+                    orderId:
+                        razorpayOrderId,
 
-                paymentId:
-                    String(
-                        razorpayPaymentId
-                    ).trim(),
+                    paymentId:
+                        razorpayPaymentId,
 
-                signature:
-                    String(
+                    signature:
                         razorpaySignature
-                    ).trim()
+                });
 
-            });
-
-
-        // =================================================
-        // INVALID SIGNATURE
-        // =================================================
 
         if (!verified) {
 
@@ -284,15 +405,10 @@ async function verifyPayment(req, res) {
                 verified: false,
 
                 message:
-                    "Payment signature verification failed"
-
+                    "Invalid payment signature"
             });
         }
 
-
-        // =================================================
-        // VERIFIED
-        // =================================================
 
         return res.status(200).json({
 
@@ -300,19 +416,8 @@ async function verifyPayment(req, res) {
 
             verified: true,
 
-            orderId:
-                String(
-                    razorpayOrderId
-                ).trim(),
-
-            paymentId:
-                String(
-                    razorpayPaymentId
-                ).trim(),
-
             message:
-                "Payment signature verified successfully"
-
+                "Payment signature verified"
         });
 
     } catch (error) {
@@ -331,10 +436,8 @@ async function verifyPayment(req, res) {
 
             message:
                 error.message ||
-                "Unable to verify payment"
-
+                "Payment verification failed"
         });
-
     }
 }
 
@@ -347,6 +450,7 @@ module.exports = {
 
     createOrder,
 
-    verifyPayment
+    createPaymentIntent,
 
+    verifyPayment
 };
