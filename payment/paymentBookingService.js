@@ -4,12 +4,13 @@
 // Responsibility:
 // - Payment ke liye booking data validate karna
 // - Booking amount ko safely paise mein convert karna
-// - Future mein authoritative commission/settings yahin
-//   se calculate karna
+// - Booking ownership/auth information provide karna
+// - Future mein authoritative payment validation ka base
+//   provide karna
 //
 // IMPORTANT:
-// Abhi existing booking flow ko change nahi kiya ja raha.
-// Ye file payment architecture ka foundation hai.
+// - Existing booking flow ko change nahi kiya ja raha.
+// - Ye service sirf payment ke liye booking validate karti hai.
 //
 // This file does NOT:
 // - create Razorpay order
@@ -154,9 +155,11 @@ async function getBooking(
 // VALIDATE BOOKING FOR PAYMENT
 // =========================================================
 // Ye function payment order banane se pehle
-// booking ko basic level par validate karega.
+// booking ko validate karega.
 //
-// Abhi commission calculate nahi karta.
+// Existing booking fields preserve hain.
+// Additional auth fields bhi return honge agar
+// booking mein available hain.
 // =========================================================
 
 async function validateBookingForPayment(
@@ -236,6 +239,37 @@ async function validateBookingForPayment(
         );
 
 
+    // =====================================================
+    // AUTH / OWNERSHIP INFORMATION
+    // =====================================================
+    // Different existing booking versions mein
+    // different field names ho sakte hain.
+    //
+    // Hum value ko safely read kar rahe hain.
+    // Agar field available nahi hai to empty string.
+    //
+    // Existing booking data modify nahi ho raha.
+    // =====================================================
+
+    const authUid =
+        booking.authUid
+            ? String(
+                booking.authUid
+            )
+            : "";
+
+    const customerAuthUid =
+        booking.customerAuthUid
+            ? String(
+                booking.customerAuthUid
+            )
+            : "";
+
+
+    // =====================================================
+    // RETURN
+    // =====================================================
+
     return {
 
         bookingId:
@@ -274,7 +308,17 @@ async function validateBookingForPayment(
                 ? String(
                     booking.paymentMode
                 )
-                : ""
+                : "",
+
+        // =================================================
+        // AUTH FIELDS
+        // =================================================
+
+        authUid:
+            authUid,
+
+        customerAuthUid:
+            customerAuthUid
 
     };
 }
