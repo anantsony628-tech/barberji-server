@@ -22,6 +22,9 @@ const db = getDatabase();
 const paymentRoutes =
     require("./payment/paymentRoutes");
 
+const bookingCancellationRoutes =
+    require("./booking/bookingCancellationRoutes");
+
 // ==========================================
 // EXPRESS SERVER
 // ==========================================
