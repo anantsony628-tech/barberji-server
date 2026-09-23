@@ -1,6 +1,5 @@
 const express = require("express");
-const paymentRoutes =
-    require("./payment/paymentRoutes");
+
 const path = require("path");
 const admin = require("firebase-admin");
 const { getDatabase } = require("firebase-admin/database");
@@ -19,6 +18,9 @@ admin.initializeApp({
 
 // Firebase Realtime Database
 const db = getDatabase();
+
+const paymentRoutes =
+    require("./payment/paymentRoutes");
 
 // ==========================================
 // EXPRESS SERVER
