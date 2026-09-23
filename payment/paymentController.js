@@ -479,6 +479,21 @@ async function verifyPayment(req, res) {
                 ? String(paymentIntent.authUid)
                 : "";
 
+        console.log(
+    "PAYMENT AUTH UID:",
+    authUid
+);
+
+console.log(
+    "PAYMENT INTENT AUTH UID:",
+    intentAuthUid
+);
+
+console.log(
+    "PAYMENT INTENT ID:",
+    paymentIntentId
+);
+
 
         if (!intentAuthUid ||
             intentAuthUid !== authUid) {
