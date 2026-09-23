@@ -700,12 +700,11 @@ async function getPaymentIntent(
 
     return {
 
-        paymentIntentId:
-            cleanId,
+    ...data,
 
-        data:
-            data
-    };
+    paymentIntentId:
+        cleanId
+};
 }
 
 
