@@ -93,22 +93,22 @@ async function verifyFirebaseUser(req, res, next) {
 
     } catch (error) {
 
-        console.error(
-            "Payment authentication error:",
-            error
-        );
+    console.error(
+        "Payment authentication error:",
+        error
+    );
 
+    return res.status(401).json({
 
-        return res.status(401).json({
+        success: false,
 
-            success: false,
+        message:
+            error.code ||
+            error.message ||
+            "Firebase authentication failed"
 
-            message:
-                "Invalid or expired authentication token"
-
-        });
-
-    }
+    });
+}
 }
 
 
