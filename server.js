@@ -35,6 +35,11 @@ app.use(
     paymentRoutes
 );
 
+app.use(
+    "/booking",
+    bookingCancellationRoutes
+);
+
 // =========================================================
 // PARTNER PASSWORD RESET WEB PAGE
 // =========================================================
