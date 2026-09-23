@@ -2,14 +2,13 @@
 // BARBER JI - PAYMENT CONTROLLER
 // =========================================================
 // Responsibility:
-// - Receive payment API request
-// - Validate basic request data
+// - Receive payment API requests
+// - Validate request data
 // - Call paymentService
-// - Return clean API response
+// - Return clean API responses
 //
 // This file does NOT:
 // - calculate commission
-// - verify payment
 // - process refund
 // - process payout
 // - directly call Razorpay
@@ -21,7 +20,7 @@ const paymentService =
 
 
 // =========================================================
-// CREATE PAYMENT ORDER
+// CREATE RAZORPAY ORDER
 // =========================================================
 
 async function createOrder(req, res) {
@@ -35,9 +34,9 @@ async function createOrder(req, res) {
         } = req.body || {};
 
 
-        // -------------------------------------------------
-        // AMOUNT REQUIRED
-        // -------------------------------------------------
+        // =================================================
+        // BASIC AMOUNT VALIDATION
+        // =================================================
 
         if (
             amountPaise === undefined ||
@@ -54,10 +53,6 @@ async function createOrder(req, res) {
             });
         }
 
-
-        // -------------------------------------------------
-        // CONVERT STRING NUMBER SAFELY
-        // -------------------------------------------------
 
         const numericAmount =
             Number(amountPaise);
@@ -79,9 +74,9 @@ async function createOrder(req, res) {
         }
 
 
-        // -------------------------------------------------
-        // RECEIPT REQUIRED
-        // -------------------------------------------------
+        // =================================================
+        // RECEIPT VALIDATION
+        // =================================================
 
         if (
             !receipt ||
@@ -99,9 +94,9 @@ async function createOrder(req, res) {
         }
 
 
-        // -------------------------------------------------
+        // =================================================
         // CREATE RAZORPAY ORDER
-        // -------------------------------------------------
+        // =================================================
 
         const result =
             await paymentService.createOrder({
@@ -113,16 +108,13 @@ async function createOrder(req, res) {
                     String(receipt).trim(),
 
                 notes:
-                    notes && typeof notes === "object"
+                    notes &&
+                    typeof notes === "object"
                         ? notes
                         : {}
 
             });
 
-
-        // -------------------------------------------------
-        // SUCCESS
-        // -------------------------------------------------
 
         return res.status(201).json({
 
@@ -147,10 +139,6 @@ async function createOrder(req, res) {
 
     } catch (error) {
 
-        // -------------------------------------------------
-        // SERVER ERROR
-        // -------------------------------------------------
-
         console.error(
             "Create payment order error:",
             error
@@ -172,11 +160,193 @@ async function createOrder(req, res) {
 
 
 // =========================================================
+// VERIFY RAZORPAY PAYMENT
+// =========================================================
+// Android se milne wale:
+//
+// razorpay_order_id
+// razorpay_payment_id
+// razorpay_signature
+//
+// ko backend par verify kiya jayega.
+//
+// IMPORTANT:
+// Sirf successful verification ke baad hi
+// future mein booking ko payment-confirmed maana jayega.
+//
+// Abhi ye endpoint booking update nahi karta.
+// =========================================================
+
+async function verifyPayment(req, res) {
+
+    try {
+
+        const {
+            razorpayOrderId,
+            razorpayPaymentId,
+            razorpaySignature
+        } = req.body || {};
+
+
+        // =================================================
+        // REQUIRED FIELD CHECK
+        // =================================================
+
+        if (
+            !razorpayOrderId ||
+            String(razorpayOrderId).trim() === ""
+        ) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                verified: false,
+
+                message:
+                    "Razorpay order ID is required"
+
+            });
+        }
+
+
+        if (
+            !razorpayPaymentId ||
+            String(razorpayPaymentId).trim() === ""
+        ) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                verified: false,
+
+                message:
+                    "Razorpay payment ID is required"
+
+            });
+        }
+
+
+        if (
+            !razorpaySignature ||
+            String(razorpaySignature).trim() === ""
+        ) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                verified: false,
+
+                message:
+                    "Razorpay payment signature is required"
+
+            });
+        }
+
+
+        // =================================================
+        // VERIFY SIGNATURE
+        // =================================================
+
+        const verified =
+            paymentService.verifyPaymentSignature({
+
+                orderId:
+                    String(
+                        razorpayOrderId
+                    ).trim(),
+
+                paymentId:
+                    String(
+                        razorpayPaymentId
+                    ).trim(),
+
+                signature:
+                    String(
+                        razorpaySignature
+                    ).trim()
+
+            });
+
+
+        // =================================================
+        // INVALID SIGNATURE
+        // =================================================
+
+        if (!verified) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                verified: false,
+
+                message:
+                    "Payment signature verification failed"
+
+            });
+        }
+
+
+        // =================================================
+        // VERIFIED
+        // =================================================
+
+        return res.status(200).json({
+
+            success: true,
+
+            verified: true,
+
+            orderId:
+                String(
+                    razorpayOrderId
+                ).trim(),
+
+            paymentId:
+                String(
+                    razorpayPaymentId
+                ).trim(),
+
+            message:
+                "Payment signature verified successfully"
+
+        });
+
+    } catch (error) {
+
+        console.error(
+            "Payment verification error:",
+            error
+        );
+
+
+        return res.status(500).json({
+
+            success: false,
+
+            verified: false,
+
+            message:
+                error.message ||
+                "Unable to verify payment"
+
+        });
+
+    }
+}
+
+
+// =========================================================
 // EXPORT
 // =========================================================
 
 module.exports = {
 
-    createOrder
+    createOrder,
+
+    verifyPayment
 
 };
