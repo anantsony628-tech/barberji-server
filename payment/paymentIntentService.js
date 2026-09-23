@@ -25,11 +25,15 @@
 const admin =
     require("firebase-admin");
 
+const {
+    getDatabase
+} = require("firebase-admin/database");
+
 const crypto =
     require("crypto");
 
 const db =
-    admin.database();
+    getDatabase();
 
 const paymentService =
     require("./paymentService");
@@ -593,7 +597,8 @@ async function createPaymentIntent({
             "CREATED",
 
         createdAt:
-            admin.database.ServerValue.TIMESTAMP
+    require("firebase-admin/database")
+        .ServerValue.TIMESTAMP
     };
 
 
