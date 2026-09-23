@@ -2,7 +2,8 @@
 // BARBER JI - PAYMENT ROUTES
 // =========================================================
 
-const express = require("express");
+const express =
+    require("express");
 
 const paymentController =
     require("./paymentController");
@@ -31,7 +32,19 @@ router.post(
 
 
 // =========================================================
+// VERIFY RAZORPAY PAYMENT
+// =========================================================
+
+router.post(
+    "/verify-payment",
+    paymentAuth.verifyFirebaseUser,
+    paymentController.verifyPayment
+);
+
+
+// =========================================================
 // EXPORT
 // =========================================================
 
-module.exports = router;
+module.exports =
+    router;
