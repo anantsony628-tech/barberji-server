@@ -20,8 +20,9 @@
 // - directly update booking
 // =========================================================
 
-const admin =
-    require("firebase-admin");
+const {
+    getDatabase
+} = require("firebase-admin/database");
 
 
 // =========================================================
@@ -29,7 +30,7 @@ const admin =
 // =========================================================
 
 const db =
-    admin.database();
+    getDatabase();
 
 
 // =========================================================
