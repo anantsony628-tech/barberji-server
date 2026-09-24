@@ -3,7 +3,7 @@
 // =========================================================
 // Responsibility:
 // - Admin settlement settings read/update karna
-// - Partner settlement preference read/update karna
+// - Partner + Salon settlement preference read/update karna
 // - Actual settlement calculation/process nahi karna
 // - Koi settlement timing hardcode nahi karna
 //
@@ -11,7 +11,7 @@
 // - Actual configuration Firebase se aayegi.
 // - Admin global settlement policy control karega.
 // - Partner apni allowed settlement preference select karega.
-// - Final payout baad mein settlement service karegi.
+// - Final payout settlement service karegi.
 // =========================================================
 
 const settlementConfigService =
@@ -22,20 +22,25 @@ const settlementConfigService =
 // GET ADMIN SETTLEMENT CONFIG
 // =========================================================
 
-async function getAdminSettlementConfig(req, res) {
+async function getAdminSettlementConfig(
+    req,
+    res
+) {
 
     try {
 
         const config =
             await settlementConfigService
-                .getAdminSettlementConfig();
+                .getAdminSettlementSettings();
 
 
         return res.status(200).json({
 
-            success: true,
+            success:
+                true,
 
-            config: config
+            config:
+                config
 
         });
 
@@ -49,7 +54,8 @@ async function getAdminSettlementConfig(req, res) {
 
         return res.status(500).json({
 
-            success: false,
+            success:
+                false,
 
             message:
                 error.message ||
@@ -63,25 +69,11 @@ async function getAdminSettlementConfig(req, res) {
 // =========================================================
 // UPDATE ADMIN SETTLEMENT CONFIG
 // =========================================================
-// Admin Panel se call hoga.
-//
-// Example body:
-//
-// {
-//     "enabled": true,
-//     "defaultMode": "NEXT_DAY",
-//     "instantEnabled": true,
-//     "nextDayEnabled": true,
-//     "afterHoursEnabled": true,
-//     "afterHours": 24
-// }
-//
-// IMPORTANT:
-// Controller values ko hardcode nahi karta.
-// Validation settlementConfigService karegi.
-// =========================================================
 
-async function updateAdminSettlementConfig(req, res) {
+async function updateAdminSettlementConfig(
+    req,
+    res
+) {
 
     try {
 
@@ -98,7 +90,8 @@ async function updateAdminSettlementConfig(req, res) {
 
         return res.status(200).json({
 
-            success: true,
+            success:
+                true,
 
             message:
                 "Settlement configuration updated successfully",
@@ -118,7 +111,8 @@ async function updateAdminSettlementConfig(req, res) {
 
         return res.status(400).json({
 
-            success: false,
+            success:
+                false,
 
             message:
                 error.message ||
@@ -132,9 +126,7 @@ async function updateAdminSettlementConfig(req, res) {
 // =========================================================
 // GET PARTNER SETTLEMENT PREFERENCE
 // =========================================================
-// Partner Dashboard se call hoga.
-//
-// partnerId + salonId ke basis par preference milegi.
+// Partner + Salon specific preference.
 // =========================================================
 
 async function getPartnerSettlementPreference(
@@ -145,20 +137,23 @@ async function getPartnerSettlementPreference(
     try {
 
         const partnerId =
-            req.params.partnerId;
+            String(
+                req.params.partnerId || ""
+            ).trim();
+
 
         const salonId =
-            req.params.salonId;
+            String(
+                req.params.salonId || ""
+            ).trim();
 
 
-        if (
-            !partnerId ||
-            String(partnerId).trim() === ""
-        ) {
+        if (!partnerId) {
 
             return res.status(400).json({
 
-                success: false,
+                success:
+                    false,
 
                 message:
                     "Partner ID is required"
@@ -167,14 +162,12 @@ async function getPartnerSettlementPreference(
         }
 
 
-        if (
-            !salonId ||
-            String(salonId).trim() === ""
-        ) {
+        if (!salonId) {
 
             return res.status(400).json({
 
-                success: false,
+                success:
+                    false,
 
                 message:
                     "Salon ID is required"
@@ -183,39 +176,30 @@ async function getPartnerSettlementPreference(
         }
 
 
-        const preference =
+        const settings =
             await settlementConfigService
-                .getPartnerSettlementPreference({
-
-                    partnerId:
-                        String(
-                            partnerId
-                        ).trim(),
-
-                    salonId:
-                        String(
-                            salonId
-                        ).trim()
-
-                });
+                .getPartnerSettlementSettings(
+                    partnerId,
+                    salonId
+                );
 
 
         return res.status(200).json({
 
-            success: true,
+            success:
+                true,
 
             partnerId:
-                String(
-                    partnerId
-                ).trim(),
+                partnerId,
 
             salonId:
-                String(
-                    salonId
-                ).trim(),
+                salonId,
 
             preference:
-                preference
+                settings.preferredMode || "",
+
+            settings:
+                settings
 
         });
 
@@ -229,7 +213,8 @@ async function getPartnerSettlementPreference(
 
         return res.status(500).json({
 
-            success: false,
+            success:
+                false,
 
             message:
                 error.message ||
@@ -243,23 +228,14 @@ async function getPartnerSettlementPreference(
 // =========================================================
 // UPDATE PARTNER SETTLEMENT PREFERENCE
 // =========================================================
-// Partner Dashboard se call hoga.
+// Partner wahi mode select kar sakta hai jo Admin ne
+// allowedModes mein enable kiya hai.
 //
-// Example:
+// Body example:
 //
 // {
 //     "mode": "INSTANT"
 // }
-//
-// Ya:
-//
-// {
-//     "mode": "NEXT_DAY"
-// }
-//
-// Ya admin dwara allowed koi configured mode.
-//
-// Actual validation service karegi.
 // =========================================================
 
 async function updatePartnerSettlementPreference(
@@ -270,20 +246,23 @@ async function updatePartnerSettlementPreference(
     try {
 
         const partnerId =
-            req.params.partnerId;
+            String(
+                req.params.partnerId || ""
+            ).trim();
+
 
         const salonId =
-            req.params.salonId;
+            String(
+                req.params.salonId || ""
+            ).trim();
 
 
-        if (
-            !partnerId ||
-            String(partnerId).trim() === ""
-        ) {
+        if (!partnerId) {
 
             return res.status(400).json({
 
-                success: false,
+                success:
+                    false,
 
                 message:
                     "Partner ID is required"
@@ -292,14 +271,12 @@ async function updatePartnerSettlementPreference(
         }
 
 
-        if (
-            !salonId ||
-            String(salonId).trim() === ""
-        ) {
+        if (!salonId) {
 
             return res.status(400).json({
 
-                success: false,
+                success:
+                    false,
 
                 message:
                     "Salon ID is required"
@@ -317,14 +294,10 @@ async function updatePartnerSettlementPreference(
                 .updatePartnerSettlementPreference({
 
                     partnerId:
-                        String(
-                            partnerId
-                        ).trim(),
+                        partnerId,
 
                     salonId:
-                        String(
-                            salonId
-                        ).trim(),
+                        salonId,
 
                     preference:
                         body
@@ -334,20 +307,17 @@ async function updatePartnerSettlementPreference(
 
         return res.status(200).json({
 
-            success: true,
+            success:
+                true,
 
             message:
                 "Partner settlement preference updated successfully",
 
             partnerId:
-                String(
-                    partnerId
-                ).trim(),
+                partnerId,
 
             salonId:
-                String(
-                    salonId
-                ).trim(),
+                salonId,
 
             preference:
                 result
@@ -364,7 +334,8 @@ async function updatePartnerSettlementPreference(
 
         return res.status(400).json({
 
-            success: false,
+            success:
+                false,
 
             message:
                 error.message ||
