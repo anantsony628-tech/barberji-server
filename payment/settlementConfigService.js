@@ -2,27 +2,56 @@
 // BARBER JI - SETTLEMENT CONFIG SERVICE
 // =========================================================
 // Responsibility:
-// - Admin settlement settings read karna
-// - Partner settlement preference read karna
-// - Settlement configuration validate karna
+// - Admin settlement settings read/update karna
+// - Partner + Salon settlement preference read/update karna
 // - Effective settlement mode determine karna
+// - Settlement timing configuration Firebase se lena
 //
 // IMPORTANT:
-// - Instant / Next Day / 24 Hours hardcoded decision nahi hai
-// - Actual setting Firebase se aayegi
-// - Admin settlement system ko control karega
-// - Partner apni preferred settlement timing choose karega
+// - Actual settlement timing hardcoded nahi hai.
+// - Admin allowed modes control karega.
+// - Admin har mode ka delay configure karega.
+// - Partner allowed modes mein se preference select karega.
+// - Partner ki preference salon-wise save hogi.
+// - Actual payout is file mein nahi hoga.
 //
-// This file does NOT:
-// - transfer money
-// - create Razorpay payout
-// - process refund
-// - complete service
-// - update booking
+// FIREBASE:
+//
+// BarberJi/Settings/Settlement
+//
+// BarberJi/PartnerSettlementSettings/{partnerId}/{salonId}
+//
+// Example:
+//
+// BarberJi
+//   Settings
+//     Settlement
+//       enabled: true
+//       defaultMode: "NEXT_DAY"
+//       allowedModes:
+//         INSTANT: true
+//         NEXT_DAY: true
+//         AFTER_24_HOURS: true
+//
+//       modeSettings
+//         INSTANT
+//           delayMinutes: 0
+//         NEXT_DAY
+//           delayMinutes: 1440
+//         AFTER_24_HOURS
+//           delayMinutes: 1440
+//
+// Partner:
+//
+// PartnerSettlementSettings
+//   PARTNER001
+//     SALON00001
+//       preferredMode: "NEXT_DAY"
 // =========================================================
 
 const {
-    getDatabase
+    getDatabase,
+    ServerValue
 } = require("firebase-admin/database");
 
 
@@ -37,10 +66,10 @@ const db =
 // =========================================================
 // DEFAULT CONFIGURATION
 // =========================================================
-// Ye sirf schema-safe fallback hai.
-// Iska purpose automatic payout decision lena nahi hai.
-// Admin setting available na ho to settlement allowed
-// nahi ki jayegi.
+// IMPORTANT:
+// Ye payout decision nahi hai.
+// Firebase configuration missing hone par
+// settlement automatically execute nahi hoga.
 // =========================================================
 
 const DEFAULT_ADMIN_SETTINGS = {
@@ -48,10 +77,14 @@ const DEFAULT_ADMIN_SETTINGS = {
     enabled:
         false,
 
-    allowedModes: [],
+    allowedModes:
+        [],
 
     defaultMode:
         "",
+
+    modeSettings:
+        {},
 
     updatedAt:
         0
@@ -59,6 +92,12 @@ const DEFAULT_ADMIN_SETTINGS = {
 
 
 const DEFAULT_PARTNER_SETTINGS = {
+
+    partnerId:
+        "",
+
+    salonId:
+        "",
 
     preferredMode:
         "",
@@ -88,44 +127,74 @@ function cleanString(value) {
 
 function normalizeMode(value) {
 
-    const mode =
-        cleanString(value)
-            .toUpperCase()
-            .replace(/[\s-]+/g, "_");
-
-    return mode;
+    return cleanString(value)
+        .toUpperCase()
+        .replace(/[\s-]+/g, "_");
 }
 
 
 function normalizeBoolean(value) {
 
     if (value === true) {
+
         return true;
     }
 
+
     if (value === false) {
+
         return false;
     }
+
 
     if (
         typeof value === "string"
     ) {
 
         return (
-            value.toLowerCase() ===
+            value
+                .trim()
+                .toLowerCase() ===
             "true"
         );
     }
+
+
+    if (
+        typeof value === "number"
+    ) {
+
+        return value === 1;
+    }
+
 
     return false;
 }
 
 
+function safeTimestamp(value) {
+
+    const number =
+        Number(value);
+
+
+    if (
+        !Number.isFinite(number)
+    ) {
+
+        return 0;
+    }
+
+
+    return number;
+}
+
+
 // =========================================================
-// NORMALIZE SETTLEMENT MODE
+// SETTLEMENT MODE VALIDATION
 // =========================================================
-// Supported values Firebase mein admin/partner setting
-// ke through aayengi.
+// Mode names predefined identity hain.
+// Lekin actual delay Firebase ke modeSettings se aayega.
 //
 // Example:
 // INSTANT
@@ -138,6 +207,7 @@ function isValidSettlementMode(mode) {
     const cleanMode =
         normalizeMode(mode);
 
+
     return (
         cleanMode === "INSTANT" ||
         cleanMode === "NEXT_DAY" ||
@@ -147,23 +217,193 @@ function isValidSettlementMode(mode) {
 
 
 // =========================================================
-// GET ADMIN SETTLEMENT SETTINGS
+// NORMALIZE ALLOWED MODES
 // =========================================================
-// Firebase path:
 //
-// BarberJi/Settings/Settlement
+// Supported Firebase formats:
+//
+// 1. Array:
+//
+// allowedModes: [
+//     "INSTANT",
+//     "NEXT_DAY"
+// ]
+//
+// 2. Object:
+//
+// allowedModes: {
+//     INSTANT: true,
+//     NEXT_DAY: true
+// }
+//
+// =========================================================
+
+function normalizeAllowedModes(
+    value
+) {
+
+    let modes = [];
+
+
+    if (
+        Array.isArray(value)
+    ) {
+
+        modes =
+            value
+                .map(
+                    mode =>
+                        normalizeMode(mode)
+                );
+
+    } else if (
+        value &&
+        typeof value === "object"
+    ) {
+
+        modes =
+            Object.keys(value)
+                .filter(
+                    mode =>
+                        normalizeBoolean(
+                            value[mode]
+                        )
+                )
+                .map(
+                    mode =>
+                        normalizeMode(mode)
+                );
+    }
+
+
+    modes =
+        modes
+            .filter(
+                mode =>
+                    isValidSettlementMode(
+                        mode
+                    )
+            );
+
+
+    return [
+        ...new Set(modes)
+    ];
+}
+
+
+// =========================================================
+// NORMALIZE MODE SETTINGS
+// =========================================================
+// Actual delay Firebase se aayega.
 //
 // Example:
 //
-// {
-//   enabled: true,
-//   allowedModes: [
-//      "INSTANT",
-//      "NEXT_DAY",
-//      "AFTER_24_HOURS"
-//   ],
-//   defaultMode: "NEXT_DAY"
+// modeSettings: {
+//
+//   INSTANT: {
+//      delayMinutes: 0
+//   },
+//
+//   NEXT_DAY: {
+//      delayMinutes: 1440
+//   },
+//
+//   AFTER_24_HOURS: {
+//      delayMinutes: 1440
+//   }
+//
 // }
+// =========================================================
+
+function normalizeModeSettings(
+    value
+) {
+
+    const result = {};
+
+
+    if (
+        !value ||
+        typeof value !== "object"
+    ) {
+
+        return result;
+    }
+
+
+    Object.keys(value)
+        .forEach(modeKey => {
+
+            const mode =
+                normalizeMode(
+                    modeKey
+                );
+
+
+            if (
+                !isValidSettlementMode(
+                    mode
+                )
+            ) {
+
+                return;
+            }
+
+
+            const data =
+                value[modeKey];
+
+
+            if (
+                !data ||
+                typeof data !== "object"
+            ) {
+
+                return;
+            }
+
+
+            const delayMinutes =
+                Number(
+                    data.delayMinutes ??
+                    data.delay_minutes
+                );
+
+
+            if (
+                !Number.isFinite(
+                    delayMinutes
+                ) ||
+                delayMinutes < 0
+            ) {
+
+                return;
+            }
+
+
+            result[mode] = {
+
+                delayMinutes:
+                    Math.floor(
+                        delayMinutes
+                    )
+
+            };
+
+        });
+
+
+    return result;
+}
+
+
+// =========================================================
+// GET ADMIN SETTLEMENT SETTINGS
+// =========================================================
+// Firebase:
+//
+// BarberJi/Settings/Settlement
 // =========================================================
 
 async function getAdminSettlementSettings() {
@@ -181,7 +421,10 @@ async function getAdminSettlementSettings() {
     ) {
 
         return {
-            ...DEFAULT_ADMIN_SETTINGS
+            ...DEFAULT_ADMIN_SETTINGS,
+
+            modeSettings:
+                {}
         };
     }
 
@@ -196,81 +439,41 @@ async function getAdminSettlementSettings() {
     ) {
 
         return {
-            ...DEFAULT_ADMIN_SETTINGS
+            ...DEFAULT_ADMIN_SETTINGS,
+
+            modeSettings:
+                {}
         };
     }
 
 
-    const enabled =
-        normalizeBoolean(
-            data.enabled
+    const allowedModes =
+        normalizeAllowedModes(
+            data.allowedModes ??
+            data.allowed_modes
         );
-
-
-    let allowedModes = [];
-
-
-    if (
-        Array.isArray(
-            data.allowedModes
-        )
-    ) {
-
-        allowedModes =
-            data.allowedModes
-                .map(
-                    mode =>
-                        normalizeMode(mode)
-                )
-                .filter(
-                    mode =>
-                        isValidSettlementMode(
-                            mode
-                        )
-                );
-
-    } else if (
-        Array.isArray(
-            data.allowed_modes
-        )
-    ) {
-
-        allowedModes =
-            data.allowed_modes
-                .map(
-                    mode =>
-                        normalizeMode(mode)
-                )
-                .filter(
-                    mode =>
-                        isValidSettlementMode(
-                            mode
-                        )
-                );
-    }
-
-
-    // Remove duplicate modes
-
-    allowedModes =
-        [
-            ...new Set(
-                allowedModes
-            )
-        ];
 
 
     const defaultMode =
         normalizeMode(
-            data.defaultMode ||
+            data.defaultMode ??
             data.default_mode
+        );
+
+
+    const modeSettings =
+        normalizeModeSettings(
+            data.modeSettings ??
+            data.mode_settings
         );
 
 
     return {
 
         enabled:
-            enabled,
+            normalizeBoolean(
+                data.enabled
+            ),
 
         allowedModes:
             allowedModes,
@@ -282,11 +485,13 @@ async function getAdminSettlementSettings() {
                 ? defaultMode
                 : "",
 
+        modeSettings:
+            modeSettings,
+
         updatedAt:
-            Number(
-                data.updatedAt ||
-                data.updated_at ||
-                0
+            safeTimestamp(
+                data.updatedAt ??
+                data.updated_at
             )
 
     };
@@ -294,26 +499,241 @@ async function getAdminSettlementSettings() {
 
 
 // =========================================================
-// GET PARTNER SETTLEMENT PREFERENCE
+// UPDATE ADMIN SETTLEMENT SETTINGS
 // =========================================================
-// Firebase path:
+// Admin Panel se call hoga.
 //
-// BarberJi/PartnerSettlementSettings/{partnerId}
-//
-// Example:
+// Accepted body:
 //
 // {
-//   preferredMode: "INSTANT"
+//   enabled: true,
+//
+//   allowedModes: [
+//      "INSTANT",
+//      "NEXT_DAY",
+//      "AFTER_24_HOURS"
+//   ],
+//
+//   defaultMode: "NEXT_DAY",
+//
+//   modeSettings: {
+//
+//      INSTANT: {
+//          delayMinutes: 0
+//      },
+//
+//      NEXT_DAY: {
+//          delayMinutes: 1440
+//      },
+//
+//      AFTER_24_HOURS: {
+//          delayMinutes: 1440
+//      }
+//
+//   }
 // }
+//
+// IMPORTANT:
+// Delay Admin Firebase mein configure karega.
+// Code kisi timing ko decide nahi karega.
+// =========================================================
+
+async function updateAdminSettlementConfig(
+    input
+) {
+
+    const data =
+        input &&
+        typeof input === "object"
+            ? input
+            : {};
+
+
+    const enabled =
+        normalizeBoolean(
+            data.enabled
+        );
+
+
+    const allowedModes =
+        normalizeAllowedModes(
+            data.allowedModes ??
+            data.allowed_modes
+        );
+
+
+    const defaultMode =
+        normalizeMode(
+            data.defaultMode ??
+            data.default_mode
+        );
+
+
+    if (
+        enabled &&
+        allowedModes.length === 0
+    ) {
+
+        throw new Error(
+            "At least one settlement mode must be allowed"
+        );
+    }
+
+
+    if (
+        defaultMode &&
+        !isValidSettlementMode(
+            defaultMode
+        )
+    ) {
+
+        throw new Error(
+            "Invalid default settlement mode"
+        );
+    }
+
+
+    if (
+        defaultMode &&
+        !allowedModes.includes(
+            defaultMode
+        )
+    ) {
+
+        throw new Error(
+            "Default settlement mode must be one of the allowed modes"
+        );
+    }
+
+
+    const suppliedModeSettings =
+        normalizeModeSettings(
+            data.modeSettings ??
+            data.mode_settings
+        );
+
+
+    const modeSettings = {};
+
+
+    for (
+        const mode of allowedModes
+    ) {
+
+        const setting =
+            suppliedModeSettings[
+                mode
+            ];
+
+
+        if (
+            !setting
+        ) {
+
+            throw new Error(
+                "Settlement timing configuration missing for mode: " +
+                mode
+            );
+        }
+
+
+        const delayMinutes =
+            Number(
+                setting.delayMinutes
+            );
+
+
+        if (
+            !Number.isFinite(
+                delayMinutes
+            ) ||
+            delayMinutes < 0
+        ) {
+
+            throw new Error(
+                "Invalid delayMinutes for settlement mode: " +
+                mode
+            );
+        }
+
+
+        modeSettings[mode] = {
+
+            delayMinutes:
+                Math.floor(
+                    delayMinutes
+                )
+
+        };
+    }
+
+
+    const updatedAt =
+        ServerValue.TIMESTAMP;
+
+
+    const config = {
+
+        enabled:
+            enabled,
+
+        allowedModes:
+            allowedModes,
+
+        defaultMode:
+            defaultMode,
+
+        modeSettings:
+            modeSettings,
+
+        updatedAt:
+            updatedAt
+
+    };
+
+
+    await db
+        .ref(
+            "BarberJi/Settings/Settlement"
+        )
+        .set(
+            config
+        );
+
+
+    return {
+
+        ...config
+
+    };
+}
+
+
+// =========================================================
+// GET PARTNER SETTLEMENT SETTINGS
+// =========================================================
+// Preferred path:
+//
+// BarberJi/PartnerSettlementSettings/{partnerId}/{salonId}
+//
+// Old partner-level path bhi read kiya jayega fallback ke
+// liye, taaki existing data unnecessarily break na ho.
 // =========================================================
 
 async function getPartnerSettlementSettings(
-    partnerId
+    partnerId,
+    salonId
 ) {
 
     const cleanPartnerId =
         cleanString(
             partnerId
+        );
+
+
+    const cleanSalonId =
+        cleanString(
+            salonId
         );
 
 
@@ -325,7 +745,78 @@ async function getPartnerSettlementSettings(
     }
 
 
-    const snapshot =
+    // -----------------------------------------------------
+    // SALON-SPECIFIC SETTING
+    // -----------------------------------------------------
+
+    if (cleanSalonId) {
+
+        const salonSnapshot =
+            await db
+                .ref(
+                    "BarberJi/PartnerSettlementSettings"
+                )
+                .child(
+                    cleanPartnerId
+                )
+                .child(
+                    cleanSalonId
+                )
+                .once("value");
+
+
+        if (
+            salonSnapshot.exists()
+        ) {
+
+            const data =
+                salonSnapshot.val();
+
+
+            if (
+                data &&
+                typeof data === "object"
+            ) {
+
+                const preferredMode =
+                    normalizeMode(
+                        data.preferredMode ??
+                        data.preferred_mode
+                    );
+
+
+                return {
+
+                    partnerId:
+                        cleanPartnerId,
+
+                    salonId:
+                        cleanSalonId,
+
+                    preferredMode:
+                        isValidSettlementMode(
+                            preferredMode
+                        )
+                            ? preferredMode
+                            : "",
+
+                    updatedAt:
+                        safeTimestamp(
+                            data.updatedAt ??
+                            data.updated_at
+                        )
+
+                };
+            }
+        }
+    }
+
+
+    // -----------------------------------------------------
+    // OLD PARTNER-LEVEL FALLBACK
+    // -----------------------------------------------------
+
+    const partnerSnapshot =
         await db
             .ref(
                 "BarberJi/PartnerSettlementSettings"
@@ -337,78 +828,368 @@ async function getPartnerSettlementSettings(
 
 
     if (
-        !snapshot.exists()
+        partnerSnapshot.exists()
     ) {
 
-        return {
-            ...DEFAULT_PARTNER_SETTINGS
-        };
+        const data =
+            partnerSnapshot.val();
+
+
+        if (
+            data &&
+            typeof data === "object"
+        ) {
+
+            const preferredMode =
+                normalizeMode(
+                    data.preferredMode ??
+                    data.preferred_mode
+                );
+
+
+            if (
+                isValidSettlementMode(
+                    preferredMode
+                )
+            ) {
+
+                return {
+
+                    partnerId:
+                        cleanPartnerId,
+
+                    salonId:
+                        cleanSalonId,
+
+                    preferredMode:
+                        preferredMode,
+
+                    updatedAt:
+                        safeTimestamp(
+                            data.updatedAt ??
+                            data.updated_at
+                        )
+
+                };
+            }
+        }
     }
-
-
-    const data =
-        snapshot.val();
-
-
-    if (
-        !data ||
-        typeof data !== "object"
-    ) {
-
-        return {
-            ...DEFAULT_PARTNER_SETTINGS
-        };
-    }
-
-
-    const preferredMode =
-        normalizeMode(
-            data.preferredMode ||
-            data.preferred_mode
-        );
 
 
     return {
 
-        preferredMode:
-            isValidSettlementMode(
-                preferredMode
-            )
-                ? preferredMode
-                : "",
+        ...DEFAULT_PARTNER_SETTINGS,
 
-        updatedAt:
-            Number(
-                data.updatedAt ||
-                data.updated_at ||
-                0
-            )
+        partnerId:
+            cleanPartnerId,
+
+        salonId:
+            cleanSalonId
 
     };
 }
 
 
 // =========================================================
-// GET EFFECTIVE SETTLEMENT CONFIGURATION
+// UPDATE PARTNER SETTLEMENT PREFERENCE
 // =========================================================
-// Important:
+// Partner Dashboard se call hoga.
 //
-// Admin decides:
-// - settlement system enabled hai ya nahi
-// - kaun-kaun se modes allowed hain
+// Path:
 //
-// Partner decides:
-// - allowed modes mein se uski preference kya hai
+// BarberJi/PartnerSettlementSettings/{partnerId}/{salonId}
 //
-// Agar partner preference invalid/missing hai,
-// to admin ka defaultMode tabhi use hoga jab woh
-// admin ke allowedModes mein present ho.
+// Body:
 //
-// Koi automatic hardcoded settlement timing nahi.
+// {
+//    mode: "INSTANT"
+// }
+//
+// IMPORTANT:
+// Partner wahi mode select kar sakta hai jo Admin ne
+// allowedModes mein enable kiya hai.
+// =========================================================
+
+async function updatePartnerSettlementPreference(
+    input
+) {
+
+    const data =
+        input &&
+        typeof input === "object"
+            ? input
+            : {};
+
+
+    const partnerId =
+        cleanString(
+            data.partnerId
+        );
+
+
+    const salonId =
+        cleanString(
+            data.salonId
+        );
+
+
+    if (!partnerId) {
+
+        throw new Error(
+            "Partner ID is required"
+        );
+    }
+
+
+    if (!salonId) {
+
+        throw new Error(
+            "Salon ID is required"
+        );
+    }
+
+
+    let requestedMode = "";
+
+
+    // -----------------------------------------------------
+    // Accept multiple body formats safely
+    // -----------------------------------------------------
+
+    if (
+        typeof data.preference ===
+        "string"
+    ) {
+
+        requestedMode =
+            normalizeMode(
+                data.preference
+            );
+
+    } else if (
+        data.preference &&
+        typeof data.preference === "object"
+    ) {
+
+        requestedMode =
+            normalizeMode(
+                data.preference.mode ??
+                data.preference.preferredMode ??
+                data.preference.preferred_mode
+            );
+
+    } else {
+
+        requestedMode =
+            normalizeMode(
+                data.mode ??
+                data.preferredMode ??
+                data.preferred_mode
+            );
+    }
+
+
+    if (
+        !isValidSettlementMode(
+            requestedMode
+        )
+    ) {
+
+        throw new Error(
+            "Invalid settlement preference"
+        );
+    }
+
+
+    // -----------------------------------------------------
+    // READ CURRENT ADMIN CONFIG
+    // -----------------------------------------------------
+
+    const adminSettings =
+        await getAdminSettlementSettings();
+
+
+    if (
+        adminSettings.enabled !== true
+    ) {
+
+        throw new Error(
+            "Settlement system is disabled by admin"
+        );
+    }
+
+
+    // -----------------------------------------------------
+    // CHECK ADMIN ALLOWED MODE
+    // -----------------------------------------------------
+
+    if (
+        !adminSettings.allowedModes
+            .includes(
+                requestedMode
+            )
+    ) {
+
+        throw new Error(
+            "Selected settlement mode is not allowed by admin"
+        );
+    }
+
+
+    // -----------------------------------------------------
+    // CHECK MODE TIMING CONFIGURATION
+    // -----------------------------------------------------
+
+    const modeSetting =
+        adminSettings
+            .modeSettings[
+                requestedMode
+            ];
+
+
+    if (
+        !modeSetting
+    ) {
+
+        throw new Error(
+            "Settlement timing is not configured for selected mode"
+        );
+    }
+
+
+    const delayMinutes =
+        Number(
+            modeSetting.delayMinutes
+        );
+
+
+    if (
+        !Number.isFinite(
+            delayMinutes
+        ) ||
+        delayMinutes < 0
+    ) {
+
+        throw new Error(
+            "Invalid settlement timing configuration"
+        );
+    }
+
+
+    // -----------------------------------------------------
+    // SAVE PARTNER + SALON PREFERENCE
+    // -----------------------------------------------------
+
+    const updatedAt =
+        ServerValue.TIMESTAMP;
+
+
+    const partnerSetting = {
+
+        partnerId:
+            partnerId,
+
+        salonId:
+            salonId,
+
+        preferredMode:
+            requestedMode,
+
+        delayMinutes:
+            Math.floor(
+                delayMinutes
+            ),
+
+        updatedAt:
+            updatedAt
+
+    };
+
+
+    await db
+        .ref(
+            "BarberJi/PartnerSettlementSettings"
+        )
+        .child(
+            partnerId
+        )
+        .child(
+            salonId
+        )
+        .set(
+            partnerSetting
+        );
+
+
+    // -----------------------------------------------------
+    // ALSO SAVE PREFERENCE IN APPROVED SALON
+    // -----------------------------------------------------
+    // Partner dashboard / salon data se bhi preference
+    // easily read ki ja sakegi.
+    //
+    // Ye settlement timing decide nahi karta.
+    // Actual timing Admin configuration se hi aayegi.
+    // -----------------------------------------------------
+
+    await db
+        .ref(
+            "ApprovedSalons"
+        )
+        .child(
+            salonId
+        )
+        .update({
+
+            settlementPreference:
+                requestedMode,
+
+            settlementPreferenceUpdatedAt:
+                updatedAt
+
+        });
+
+
+    return {
+
+        partnerId:
+            partnerId,
+
+        salonId:
+            salonId,
+
+        preferredMode:
+            requestedMode,
+
+        delayMinutes:
+            Math.floor(
+                delayMinutes
+            ),
+
+        updatedAt:
+            updatedAt
+
+    };
+}
+
+
+// =========================================================
+// GET EFFECTIVE SETTLEMENT SETTINGS
+// =========================================================
+// Final settlement decision ke liye:
+//
+// 1. Admin enabled check
+// 2. Admin allowed modes check
+// 3. Partner preference check
+// 4. Admin default mode fallback
+// 5. Selected mode ka delay Firebase se
+//
+// IMPORTANT:
+// Yahan bhi koi timing hardcoded nahi hai.
 // =========================================================
 
 async function getEffectiveSettlementSettings(
-    partnerId
+    partnerId,
+    salonId
 ) {
 
     const adminSettings =
@@ -417,16 +1198,17 @@ async function getEffectiveSettlementSettings(
 
     const partnerSettings =
         await getPartnerSettlementSettings(
-            partnerId
+            partnerId,
+            salonId
         );
 
 
     // -----------------------------------------------------
-    // SETTLEMENT SYSTEM DISABLED
+    // ADMIN DISABLED
     // -----------------------------------------------------
 
     if (
-        !adminSettings.enabled
+        adminSettings.enabled !== true
     ) {
 
         return {
@@ -436,6 +1218,12 @@ async function getEffectiveSettlementSettings(
 
             mode:
                 "",
+
+            delayMinutes:
+                0,
+
+            source:
+                "ADMIN_DISABLED",
 
             adminSettings:
                 adminSettings,
@@ -467,24 +1255,48 @@ async function getEffectiveSettlementSettings(
             )
     ) {
 
-        return {
+        const modeSetting =
+            adminSettings
+                .modeSettings[
+                    partnerMode
+                ];
 
-            enabled:
-                true,
 
-            mode:
-                partnerMode,
+        if (
+            modeSetting &&
+            Number.isFinite(
+                Number(
+                    modeSetting.delayMinutes
+                )
+            )
+        ) {
 
-            source:
-                "PARTNER_PREFERENCE",
+            return {
 
-            adminSettings:
-                adminSettings,
+                enabled:
+                    true,
 
-            partnerSettings:
-                partnerSettings
+                mode:
+                    partnerMode,
 
-        };
+                delayMinutes:
+                    Math.floor(
+                        Number(
+                            modeSetting.delayMinutes
+                        )
+                    ),
+
+                source:
+                    "PARTNER_PREFERENCE",
+
+                adminSettings:
+                    adminSettings,
+
+                partnerSettings:
+                    partnerSettings
+
+            };
+        }
     }
 
 
@@ -492,7 +1304,7 @@ async function getEffectiveSettlementSettings(
     // ADMIN DEFAULT
     // -----------------------------------------------------
 
-    const adminDefaultMode =
+    const defaultMode =
         normalizeMode(
             adminSettings.defaultMode
         );
@@ -500,42 +1312,61 @@ async function getEffectiveSettlementSettings(
 
     if (
         isValidSettlementMode(
-            adminDefaultMode
+            defaultMode
         ) &&
         adminSettings.allowedModes
             .includes(
-                adminDefaultMode
+                defaultMode
             )
     ) {
 
-        return {
+        const modeSetting =
+            adminSettings
+                .modeSettings[
+                    defaultMode
+                ];
 
-            enabled:
-                true,
 
-            mode:
-                adminDefaultMode,
+        if (
+            modeSetting &&
+            Number.isFinite(
+                Number(
+                    modeSetting.delayMinutes
+                )
+            )
+        ) {
 
-            source:
-                "ADMIN_DEFAULT",
+            return {
 
-            adminSettings:
-                adminSettings,
+                enabled:
+                    true,
 
-            partnerSettings:
-                partnerSettings
+                mode:
+                    defaultMode,
 
-        };
+                delayMinutes:
+                    Math.floor(
+                        Number(
+                            modeSetting.delayMinutes
+                        )
+                    ),
+
+                source:
+                    "ADMIN_DEFAULT",
+
+                adminSettings:
+                    adminSettings,
+
+                partnerSettings:
+                    partnerSettings
+
+            };
+        }
     }
 
 
     // -----------------------------------------------------
-    // NO VALID MODE
-    // -----------------------------------------------------
-    // IMPORTANT:
-    // Yahan koi hardcoded fallback nahi diya gaya.
-    // Admin configuration incomplete hone par settlement
-    // system ko mode nahi milega.
+    // NO VALID CONFIGURATION
     // -----------------------------------------------------
 
     return {
@@ -545,6 +1376,9 @@ async function getEffectiveSettlementSettings(
 
         mode:
             "",
+
+        delayMinutes:
+            0,
 
         source:
             "NO_VALID_CONFIGURATION",
@@ -560,7 +1394,7 @@ async function getEffectiveSettlementSettings(
 
 
 // =========================================================
-// VALIDATE EFFECTIVE SETTLEMENT
+// VALIDATE EFFECTIVE SETTLEMENT SETTINGS
 // =========================================================
 
 function validateEffectiveSettlementSettings(
@@ -572,9 +1406,7 @@ function validateEffectiveSettlementSettings(
         typeof settings !== "object"
     ) {
 
-        throw new Error(
-            "Settlement settings are required"
-        );
+        return false;
     }
 
 
@@ -602,7 +1434,86 @@ function validateEffectiveSettlementSettings(
     }
 
 
+    const delayMinutes =
+        Number(
+            settings.delayMinutes
+        );
+
+
+    if (
+        !Number.isFinite(
+            delayMinutes
+        ) ||
+        delayMinutes < 0
+    ) {
+
+        return false;
+    }
+
+
     return true;
+}
+
+
+// =========================================================
+// CALCULATE SETTLEMENT ELIGIBILITY TIME
+// =========================================================
+// serviceCompletedAt + Admin configured delay
+//
+// IMPORTANT:
+// Delay Firebase configuration se aata hai.
+// =========================================================
+
+function calculateSettlementEligibleAt(
+    serviceCompletedAt,
+    effectiveSettings
+) {
+
+    const completedAt =
+        Number(
+            serviceCompletedAt
+        );
+
+
+    if (
+        !Number.isFinite(
+            completedAt
+        ) ||
+        completedAt <= 0
+    ) {
+
+        throw new Error(
+            "Invalid service completion time"
+        );
+    }
+
+
+    if (
+        !validateEffectiveSettlementSettings(
+            effectiveSettings
+        )
+    ) {
+
+        throw new Error(
+            "Invalid settlement configuration"
+        );
+    }
+
+
+    const delayMinutes =
+        Number(
+            effectiveSettings.delayMinutes
+        );
+
+
+    return (
+        completedAt +
+        (
+            delayMinutes *
+            60 *
+            1000
+        )
+    );
 }
 
 
@@ -614,11 +1525,17 @@ module.exports = {
 
     getAdminSettlementSettings,
 
+    updateAdminSettlementConfig,
+
     getPartnerSettlementSettings,
+
+    updatePartnerSettlementPreference,
 
     getEffectiveSettlementSettings,
 
     validateEffectiveSettlementSettings,
+
+    calculateSettlementEligibleAt,
 
     isValidSettlementMode
 
