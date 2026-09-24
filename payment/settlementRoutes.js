@@ -5,6 +5,7 @@
 // - Settlement related API routes
 // - Admin settlement configuration
 // - Partner settlement preference
+// - Service completion ke baad settlement record creation
 //
 // IMPORTANT:
 // - Actual Razorpay payout abhi yahan nahi hoga.
@@ -121,6 +122,34 @@ router.post(
     "/partner/:partnerId/:salonId",
     paymentAuth.verifyFirebaseUser,
     settlementController.updatePartnerSettlementPreference
+);
+
+
+// =========================================================
+// PARTNER - CREATE SETTLEMENT RECORD
+// =========================================================
+// POST:
+// /payment/settlement/create
+//
+// Body:
+// {
+//     "bookingId": "...",
+//     "serviceCompletedAt": 1234567890000
+// }
+//
+// IMPORTANT:
+// - Firebase authentication required.
+// - Controller verify karega ki authenticated user
+//   actual Partner hai.
+// - Controller partnerId + salonId ko booking se match karega.
+// - Commission / salonAmount client se nahi liya jayega.
+// - Actual calculation settlementService karegi.
+// =========================================================
+
+router.post(
+    "/create",
+    paymentAuth.verifyFirebaseUser,
+    settlementController.createSettlementRecord
 );
 
 
