@@ -305,38 +305,121 @@ async function calculateSettlementEligibility({
     }
 
 
-    const config =
-        await settlementConfigService
-            .getSettlementConfig();
-
-
     const settlement =
-        calculatePartnerPayable(
-            booking
+    calculatePartnerPayable(
+        booking
+    );
+
+
+// -----------------------------------------------------
+// ADMIN + PARTNER SETTLEMENT CONFIGURATION
+// -----------------------------------------------------
+// Admin settings authoritative hain.
+// Partner preference sirf admin ke allowed modes
+// mein se accept hogi.
+//
+// Koi hardcoded settlement timing nahi.
+// -----------------------------------------------------
+
+const effectiveSettings =
+    await settlementConfigService
+        .getEffectiveSettlementSettings(
+            cleanString(
+                booking.partnerId
+            )
         );
 
 
-    const preference =
-        cleanString(
-            partnerPreference
-        ).toUpperCase();
+// -----------------------------------------------------
+// VALIDATE EFFECTIVE CONFIGURATION
+// -----------------------------------------------------
+
+const validConfiguration =
+    settlementConfigService
+        .validateEffectiveSettlementSettings(
+            effectiveSettings
+        );
 
 
-    // -----------------------------------------------------
-    // Settlement config service decide karegi ki
-    // kaunsi preference allowed hai.
-    // -----------------------------------------------------
+// -----------------------------------------------------
+// NO VALID CONFIGURATION
+// -----------------------------------------------------
+// Settlement record create ho sakta hai,
+// lekin actual payout eligibility nahi hogi.
+// -----------------------------------------------------
 
-    const timing =
-        settlementConfigService
-            .resolveSettlementTiming({
+if (!validConfiguration) {
 
-                config:
-                    config,
+    return {
 
-                partnerPreference:
-                    preference
-            });
+        eligible:
+            false,
+
+        bookingId:
+            cleanString(
+                booking.bookingId ||
+                booking.orderId
+            ),
+
+        salonId:
+            cleanString(
+                booking.salonId
+            ),
+
+        partnerId:
+            cleanString(
+                booking.partnerId
+            ),
+
+        bookingAmount:
+            settlement.bookingAmount,
+
+        commission:
+            settlement.commission,
+
+        salonAmount:
+            settlement.salonAmount,
+
+        settlementPreference:
+            "",
+
+        settlementType:
+            "",
+
+        settlementDelayMinutes:
+            0,
+
+        reason:
+            effectiveSettings.enabled === false
+                ? "Settlement system is disabled by admin"
+                : "No valid settlement configuration is available",
+
+        adminSettings:
+            effectiveSettings.adminSettings,
+
+        partnerSettings:
+            effectiveSettings.partnerSettings
+
+    };
+}
+
+
+// -----------------------------------------------------
+// EFFECTIVE SETTLEMENT MODE
+// -----------------------------------------------------
+
+const timing = {
+
+    preference:
+        effectiveSettings.mode,
+
+    type:
+        effectiveSettings.mode,
+
+    delayMinutes:
+        0
+
+};
 
 
     return {
@@ -370,16 +453,22 @@ async function calculateSettlementEligibility({
             settlement.salonAmount,
 
         settlementPreference:
-            timing.preference,
+    timing.preference,
 
-        settlementType:
-            timing.type,
+settlementType:
+    timing.type,
 
-        settlementDelayMinutes:
-            timing.delayMinutes,
+settlementDelayMinutes:
+    timing.delayMinutes,
 
-        reason:
-            "Settlement will become eligible after service completion and configured settlement time"
+reason:
+    "Settlement will become eligible after service completion and configured settlement time",
+
+adminSettings:
+    effectiveSettings.adminSettings,
+
+partnerSettings:
+    effectiveSettings.partnerSettings
     };
 }
 
