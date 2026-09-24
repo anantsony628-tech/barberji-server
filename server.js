@@ -25,6 +25,9 @@ const paymentRoutes =
 const bookingCancellationRoutes =
     require("./booking/bookingCancellationRoutes");
 
+const settlementRoutes =
+    require("./payment/settlementRoutes");
+
 // ==========================================
 // EXPRESS SERVER
 // ==========================================
@@ -41,6 +44,11 @@ app.use(
 app.use(
     "/booking",
     bookingCancellationRoutes
+);
+
+app.use(
+    "/payment/settlement",
+    settlementRoutes
 );
 
 // =========================================================
