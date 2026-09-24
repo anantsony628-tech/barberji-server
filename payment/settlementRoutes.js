@@ -3,19 +3,21 @@
 // =========================================================
 // Responsibility:
 // - Settlement related API routes
-// - Firebase authenticated partner/admin requests
+// - Admin settlement configuration
+// - Partner settlement preference
 //
 // IMPORTANT:
-// - Actual payout abhi yahan nahi hoga.
+// - Actual Razorpay payout abhi yahan nahi hoga.
 // - Settlement timing hardcoded nahi hai.
 // - Configuration settlementConfigService se aayegi.
+// - Controller business/configuration logic handle karega.
 // =========================================================
 
 const express =
     require("express");
 
-const settlementService =
-    require("./settlementService");
+const settlementController =
+    require("./settlementController");
 
 const paymentAuth =
     require("./paymentAuth");
@@ -30,162 +32,95 @@ const router =
 
 
 // =========================================================
-// GET PARTNER SETTLEMENT PREFERENCE
+// ADMIN - GET SETTLEMENT CONFIG
 // =========================================================
-// Partner dashboard ke liye.
-//
 // GET:
-// /payment/settlement/partner/:salonId
+// /payment/settlement/admin/config
+//
+// NOTE:
+// Firebase authentication required.
+// Actual Admin authorization next security step mein
+// add ki jayegi.
 // =========================================================
 
 router.get(
-    "/partner/:salonId",
+    "/admin/config",
     paymentAuth.verifyFirebaseUser,
-    async (req, res) => {
-
-        try {
-
-            const salonId =
-                req.params.salonId;
-
-
-            if (
-                !salonId ||
-                String(salonId).trim() === ""
-            ) {
-
-                return res.status(400).json({
-
-                    success: false,
-
-                    message:
-                        "Salon ID is required"
-
-                });
-            }
-
-
-            const preference =
-                await settlementService
-                    .getPartnerSettlementPreference(
-                        salonId
-                    );
-
-
-            return res.status(200).json({
-
-                success: true,
-
-                salonId:
-                    String(salonId).trim(),
-
-                settlementPreference:
-                    preference
-
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Get settlement preference error:",
-                error
-            );
-
-
-            return res.status(500).json({
-
-                success: false,
-
-                message:
-                    error.message ||
-                    "Unable to get settlement preference"
-
-            });
-        }
-    }
+    settlementController.getAdminSettlementConfig
 );
 
 
 // =========================================================
-// CREATE SETTLEMENT RECORD
+// ADMIN - UPDATE SETTLEMENT CONFIG
 // =========================================================
-// Ye route service completion ke baad backend se
-// settlement record create karne ke liye use hoga.
+// POST:
+// /payment/settlement/admin/config
 //
-// Actual Razorpay payout abhi nahi karega.
+// Body:
+// {
+//     enabled: true,
+//     defaultMode: "NEXT_DAY",
+//     allowedModes: {
+//         INSTANT: true,
+//         NEXT_DAY: true,
+//         AFTER_24_HOURS: true
+//     },
+//     modeSettings: {
+//         INSTANT: {
+//             delayMinutes: 0
+//         },
+//         NEXT_DAY: {
+//             delayMinutes: 1440
+//         },
+//         AFTER_24_HOURS: {
+//             delayMinutes: 1440
+//         }
+//     }
+// }
 // =========================================================
 
 router.post(
-    "/create",
+    "/admin/config",
     paymentAuth.verifyFirebaseUser,
-    async (req, res) => {
-
-        try {
-
-            const body =
-                req.body || {};
+    settlementController.updateAdminSettlementConfig
+);
 
 
-            const booking =
-                body.booking;
+// =========================================================
+// PARTNER - GET SETTLEMENT PREFERENCE
+// =========================================================
+// GET:
+// /payment/settlement/partner/:partnerId/:salonId
+//
+// Partner + Salon specific preference.
+// =========================================================
+
+router.get(
+    "/partner/:partnerId/:salonId",
+    paymentAuth.verifyFirebaseUser,
+    settlementController.getPartnerSettlementPreference
+);
 
 
-            const serviceCompletedAt =
-                body.serviceCompletedAt;
+// =========================================================
+// PARTNER - UPDATE SETTLEMENT PREFERENCE
+// =========================================================
+// POST:
+// /payment/settlement/partner/:partnerId/:salonId
+//
+// Body example:
+// {
+//     "mode": "INSTANT"
+// }
+//
+// Partner sirf wahi mode select kar sakta hai
+// jo Admin ne allowedModes mein enable kiya hai.
+// =========================================================
 
-
-            if (
-                !booking ||
-                typeof booking !== "object"
-            ) {
-
-                return res.status(400).json({
-
-                    success: false,
-
-                    message:
-                        "Booking data is required"
-
-                });
-            }
-
-
-            const result =
-                await settlementService
-                    .createSettlementRecord({
-
-                        booking:
-                            booking,
-
-                        serviceCompletedAt:
-                            serviceCompletedAt
-
-                    });
-
-
-            return res.status(200).json(
-                result
-            );
-
-        } catch (error) {
-
-            console.error(
-                "Create settlement error:",
-                error
-            );
-
-
-            return res.status(500).json({
-
-                success: false,
-
-                message:
-                    error.message ||
-                    "Unable to create settlement"
-
-            });
-        }
-    }
+router.post(
+    "/partner/:partnerId/:salonId",
+    paymentAuth.verifyFirebaseUser,
+    settlementController.updatePartnerSettlementPreference
 );
 
 
