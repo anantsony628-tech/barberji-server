@@ -6,13 +6,13 @@
 // - Service complete hone ke baad settlement eligibility
 //   determine karna
 // - Admin settlement configuration use karna
-// - Partner ki settlement preference use karna
-// - Settlement record create/update karna
+// - Partner + Salon settlement preference use karna
+// - Settlement record create karna
 //
 // IMPORTANT:
-// - Koi hardcoded settlement timing nahi hai.
+// - Settlement timing hardcoded nahi hai.
 // - Admin configuration authoritative hai.
-// - Partner ki allowed settlement preference use hogi.
+// - Partner ki preference sirf admin allowed modes mein se hogi.
 // - Actual Razorpay payout is file mein nahi hoga.
 // =========================================================
 
@@ -65,27 +65,31 @@ function safeNumber(value) {
 
 
 // =========================================================
-// GET PARTNER SETTLEMENT PREFERENCE
-// =========================================================
-// Expected path:
-//
-// ApprovedSalons/{salonId}/settlementPreference
-//
-// Possible value:
-// - INSTANT
-// - NEXT_DAY
-// - configured option
-//
-// Agar preference available nahi hai to settlement
-// configuration service decide karegi.
+// GET PARTNER + SALON SETTLEMENT PREFERENCE
 // =========================================================
 
 async function getPartnerSettlementPreference(
+    partnerId,
     salonId
 ) {
 
+    const cleanPartnerId =
+        cleanString(
+            partnerId
+        );
+
     const cleanSalonId =
-        cleanString(salonId);
+        cleanString(
+            salonId
+        );
+
+
+    if (!cleanPartnerId) {
+
+        throw new Error(
+            "Partner ID is required"
+        );
+    }
 
 
     if (!cleanSalonId) {
@@ -96,22 +100,16 @@ async function getPartnerSettlementPreference(
     }
 
 
-    const snapshot =
-        await db
-            .ref("ApprovedSalons")
-            .child(cleanSalonId)
-            .child("settlementPreference")
-            .once("value");
-
-
-    if (!snapshot.exists()) {
-
-        return "";
-    }
+    const settings =
+        await settlementConfigService
+            .getPartnerSettlementSettings(
+                cleanPartnerId,
+                cleanSalonId
+            );
 
 
     return cleanString(
-        snapshot.val()
+        settings.preferredMode
     ).toUpperCase();
 }
 
@@ -125,7 +123,9 @@ async function getPartnerSettlementData(
 ) {
 
     const cleanSalonId =
-        cleanString(salonId);
+        cleanString(
+            salonId
+        );
 
 
     if (!cleanSalonId) {
@@ -173,15 +173,12 @@ async function getPartnerSettlementData(
 // =========================================================
 // CALCULATE PARTNER PAYABLE
 // =========================================================
-// Booking:
 //
 // bookingAmount = customer se total payment
 // commission    = Barber Ji commission
 // salonAmount   = partner ka payable amount
 //
-// IMPORTANT:
-// Existing PaymentIntent/Booking ka calculated
-// salonAmount authoritative rahega.
+// Stored salonAmount available ho to wahi authoritative hai.
 // =========================================================
 
 function calculatePartnerPayable(
@@ -227,13 +224,23 @@ function calculatePartnerPayable(
     }
 
 
+    if (
+        commission < 0
+    ) {
+
+        throw new Error(
+            "Invalid commission"
+        );
+    }
+
+
     let salonAmount =
         storedSalonAmount;
 
 
     // -----------------------------------------------------
-    // Agar stored salonAmount available nahi hai,
-    // to booking amount - commission calculate hoga.
+    // Stored salon amount available nahi hai to calculate
+    // karo.
     // -----------------------------------------------------
 
     if (
@@ -242,12 +249,10 @@ function calculatePartnerPayable(
     ) {
 
         salonAmount =
-            Math.round(
-                (
-                    bookingAmount -
-                    commission
-                ) * 100
-            ) / 100;
+            safeNumber(
+                bookingAmount -
+                commission
+            );
     }
 
 
@@ -256,6 +261,19 @@ function calculatePartnerPayable(
     ) {
 
         salonAmount = 0;
+    }
+
+
+    // -----------------------------------------------------
+    // Partner amount booking amount se zyada nahi ho sakta.
+    // -----------------------------------------------------
+
+    if (
+        salonAmount > bookingAmount
+    ) {
+
+        salonAmount =
+            bookingAmount;
     }
 
 
@@ -276,17 +294,13 @@ function calculatePartnerPayable(
 // =========================================================
 // CALCULATE SETTLEMENT ELIGIBILITY
 // =========================================================
-// Service complete hone ke baad ye function decide karega
-// ki settlement kab eligible hoga.
+// Service completion ke baad ye function determine karega:
 //
-// Actual timing settlementConfigService se aayegi.
+// - settlement mode
+// - configured delay
+// - eligibleAt
 //
-// NO HARDCODED:
-// - instant
-// - 24 hours
-// - next day
-//
-// Kuch bhi yahan fixed nahi hai.
+// Timing Firebase Admin configuration se aayegi.
 // =========================================================
 
 async function calculateSettlementEligibility({
@@ -305,50 +319,237 @@ async function calculateSettlementEligibility({
     }
 
 
+    const bookingId =
+        cleanString(
+            booking.bookingId ||
+            booking.orderId
+        );
+
+
+    const salonId =
+        cleanString(
+            booking.salonId
+        );
+
+
+    const partnerId =
+        cleanString(
+            booking.partnerId
+        );
+
+
+    if (!bookingId) {
+
+        throw new Error(
+            "Booking ID is required"
+        );
+    }
+
+
+    if (!salonId) {
+
+        throw new Error(
+            "Salon ID is required"
+        );
+    }
+
+
+    if (!partnerId) {
+
+        throw new Error(
+            "Partner ID is required"
+        );
+    }
+
+
     const settlement =
-    calculatePartnerPayable(
-        booking
-    );
-
-
-// -----------------------------------------------------
-// ADMIN + PARTNER SETTLEMENT CONFIGURATION
-// -----------------------------------------------------
-// Admin settings authoritative hain.
-// Partner preference sirf admin ke allowed modes
-// mein se accept hogi.
-//
-// Koi hardcoded settlement timing nahi.
-// -----------------------------------------------------
-
-const effectiveSettings =
-    await settlementConfigService
-        .getEffectiveSettlementSettings(
-            cleanString(
-                booking.partnerId
-            )
+        calculatePartnerPayable(
+            booking
         );
 
 
-// -----------------------------------------------------
-// VALIDATE EFFECTIVE CONFIGURATION
-// -----------------------------------------------------
+    // -----------------------------------------------------
+    // ADMIN + PARTNER CONFIGURATION
+    // -----------------------------------------------------
 
-const validConfiguration =
-    settlementConfigService
-        .validateEffectiveSettlementSettings(
-            effectiveSettings
+    const effectiveSettings =
+        await settlementConfigService
+            .getEffectiveSettlementSettings(
+                partnerId,
+                salonId
+            );
+
+
+    // -----------------------------------------------------
+    // VALIDATE EFFECTIVE CONFIGURATION
+    // -----------------------------------------------------
+
+    const validConfiguration =
+        settlementConfigService
+            .validateEffectiveSettlementSettings(
+                effectiveSettings
+            );
+
+
+    // -----------------------------------------------------
+    // NO VALID CONFIGURATION
+    // -----------------------------------------------------
+
+    if (!validConfiguration) {
+
+        return {
+
+            eligible:
+                false,
+
+            bookingId:
+                bookingId,
+
+            salonId:
+                salonId,
+
+            partnerId:
+                partnerId,
+
+            bookingAmount:
+                settlement.bookingAmount,
+
+            commission:
+                settlement.commission,
+
+            salonAmount:
+                settlement.salonAmount,
+
+            settlementPreference:
+                "",
+
+            settlementType:
+                "",
+
+            settlementDelayMinutes:
+                0,
+
+            serviceCompletedAt:
+                0,
+
+            eligibleAt:
+                0,
+
+            reason:
+                effectiveSettings.enabled === false
+                    ? "Settlement system is disabled by admin"
+                    : "No valid settlement configuration is available",
+
+            adminSettings:
+                effectiveSettings.adminSettings,
+
+            partnerSettings:
+                effectiveSettings.partnerSettings
+
+        };
+    }
+
+
+    // -----------------------------------------------------
+    // EFFECTIVE MODE
+    // -----------------------------------------------------
+
+    const mode =
+        cleanString(
+            effectiveSettings.mode
+        ).toUpperCase();
+
+
+    // -----------------------------------------------------
+    // GET CONFIGURED DELAY
+    // -----------------------------------------------------
+
+    const modeSettings =
+        effectiveSettings
+            .adminSettings
+            .modeSettings ||
+        {};
+
+
+    const modeSetting =
+        modeSettings[
+            mode
+        ];
+
+
+    if (
+        !modeSetting
+    ) {
+
+        return {
+
+            eligible:
+                false,
+
+            bookingId:
+                bookingId,
+
+            salonId:
+                salonId,
+
+            partnerId:
+                partnerId,
+
+            bookingAmount:
+                settlement.bookingAmount,
+
+            commission:
+                settlement.commission,
+
+            salonAmount:
+                settlement.salonAmount,
+
+            settlementPreference:
+                mode,
+
+            settlementType:
+                mode,
+
+            settlementDelayMinutes:
+                0,
+
+            serviceCompletedAt:
+                0,
+
+            eligibleAt:
+                0,
+
+            reason:
+                "Settlement timing is not configured for selected mode",
+
+            adminSettings:
+                effectiveSettings.adminSettings,
+
+            partnerSettings:
+                effectiveSettings.partnerSettings
+
+        };
+    }
+
+
+    const delayMinutes =
+        Number(
+            modeSetting.delayMinutes
         );
 
 
-// -----------------------------------------------------
-// NO VALID CONFIGURATION
-// -----------------------------------------------------
-// Settlement record create ho sakta hai,
-// lekin actual payout eligibility nahi hogi.
-// -----------------------------------------------------
+    if (
+        !Number.isFinite(
+            delayMinutes
+        ) ||
+        delayMinutes < 0
+    ) {
 
-if (!validConfiguration) {
+        throw new Error(
+            "Invalid settlement delay configuration"
+        );
+    }
+
 
     return {
 
@@ -356,20 +557,13 @@ if (!validConfiguration) {
             false,
 
         bookingId:
-            cleanString(
-                booking.bookingId ||
-                booking.orderId
-            ),
+            bookingId,
 
         salonId:
-            cleanString(
-                booking.salonId
-            ),
+            salonId,
 
         partnerId:
-            cleanString(
-                booking.partnerId
-            ),
+            partnerId,
 
         bookingAmount:
             settlement.bookingAmount,
@@ -381,18 +575,24 @@ if (!validConfiguration) {
             settlement.salonAmount,
 
         settlementPreference:
-            "",
+            mode,
 
         settlementType:
-            "",
+            mode,
 
         settlementDelayMinutes:
+            Math.floor(
+                delayMinutes
+            ),
+
+        serviceCompletedAt:
+            0,
+
+        eligibleAt:
             0,
 
         reason:
-            effectiveSettings.enabled === false
-                ? "Settlement system is disabled by admin"
-                : "No valid settlement configuration is available",
+            "Settlement will become eligible after service completion and configured settlement time",
 
         adminSettings:
             effectiveSettings.adminSettings,
@@ -404,83 +604,14 @@ if (!validConfiguration) {
 }
 
 
-// -----------------------------------------------------
-// EFFECTIVE SETTLEMENT MODE
-// -----------------------------------------------------
-
-const timing = {
-
-    preference:
-        effectiveSettings.mode,
-
-    type:
-        effectiveSettings.mode,
-
-    delayMinutes:
-        0
-
-};
-
-
-    return {
-
-        eligible:
-            false,
-
-        bookingId:
-            cleanString(
-                booking.bookingId ||
-                booking.orderId
-            ),
-
-        salonId:
-            cleanString(
-                booking.salonId
-            ),
-
-        partnerId:
-            cleanString(
-                booking.partnerId
-            ),
-
-        bookingAmount:
-            settlement.bookingAmount,
-
-        commission:
-            settlement.commission,
-
-        salonAmount:
-            settlement.salonAmount,
-
-        settlementPreference:
-    timing.preference,
-
-settlementType:
-    timing.type,
-
-settlementDelayMinutes:
-    timing.delayMinutes,
-
-reason:
-    "Settlement will become eligible after service completion and configured settlement time",
-
-adminSettings:
-    effectiveSettings.adminSettings,
-
-partnerSettings:
-    effectiveSettings.partnerSettings
-    };
-}
-
-
 // =========================================================
 // CREATE SETTLEMENT RECORD
 // =========================================================
-// Service complete hone ke baad is function ko call kiya
-// jayega.
+// Service complete hone ke baad call hoga.
 //
-// Ye sirf settlement record create karega.
-// Razorpay payout yahan nahi hoga.
+// IMPORTANT:
+// Ye Razorpay payout nahi karta.
+// Ye sirf settlement record create karta hai.
 // =========================================================
 
 async function createSettlementRecord({
@@ -543,37 +674,12 @@ async function createSettlementRecord({
 
 
     // -----------------------------------------------------
-    // PARTNER PREFERENCE
-    // -----------------------------------------------------
-
-    const partnerPreference =
-        await getPartnerSettlementPreference(
-            salonId
-        );
-
-
-    // -----------------------------------------------------
-    // ELIGIBILITY
-    // -----------------------------------------------------
-
-    const eligibility =
-        await calculateSettlementEligibility({
-
-            booking:
-                booking,
-
-            partnerPreference:
-                partnerPreference
-
-        });
-
-
-    // -----------------------------------------------------
     // SERVICE COMPLETION TIME
     // -----------------------------------------------------
 
     const completedAt =
-        serviceCompletedAt
+        serviceCompletedAt !== undefined &&
+        serviceCompletedAt !== null
             ? Number(serviceCompletedAt)
             : Date.now();
 
@@ -587,6 +693,58 @@ async function createSettlementRecord({
             "Invalid service completion time"
         );
     }
+
+
+    // -----------------------------------------------------
+    // CALCULATE ELIGIBILITY CONFIG
+    // -----------------------------------------------------
+
+    const eligibility =
+        await calculateSettlementEligibility({
+
+            booking:
+                booking,
+
+            partnerPreference:
+                ""
+
+        });
+
+
+    // -----------------------------------------------------
+    // ELIGIBLE AT
+    // -----------------------------------------------------
+
+    let eligibleAt = 0;
+
+
+    if (
+        eligibility.settlementDelayMinutes >= 0 &&
+        eligibility.settlementType
+    ) {
+
+        eligibleAt =
+            completedAt +
+            (
+                eligibility
+                    .settlementDelayMinutes *
+                60 *
+                1000
+            );
+    }
+
+
+    // -----------------------------------------------------
+    // FINAL ELIGIBILITY
+    // -----------------------------------------------------
+
+    const isEligible =
+        eligibility.eligible === true ||
+        (
+            eligibility.settlementType !== "" &&
+            eligibleAt > 0 &&
+            Date.now() >= eligibleAt
+        );
 
 
     // -----------------------------------------------------
@@ -605,15 +763,15 @@ async function createSettlementRecord({
             .child(settlementId);
 
 
+    // -----------------------------------------------------
+    // DUPLICATE PROTECTION
+    // -----------------------------------------------------
+
     const existingSnapshot =
         await settlementRef.once(
             "value"
         );
 
-
-    // -----------------------------------------------------
-    // DUPLICATE PROTECTION
-    // -----------------------------------------------------
 
     if (
         existingSnapshot.exists()
@@ -691,8 +849,16 @@ async function createSettlementRecord({
         serviceCompletedAt:
             completedAt,
 
+        eligibleAt:
+            eligibleAt,
+
         status:
-            "PENDING",
+            isEligible
+                ? "ELIGIBLE"
+                : "PENDING",
+
+        payoutStatus:
+            "NOT_PROCESSED",
 
         createdAt:
             ServerValue.TIMESTAMP
