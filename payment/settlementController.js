@@ -345,6 +345,298 @@ async function updatePartnerSettlementPreference(
     }
 }
 
+// =========================================================
+// CREATE SETTLEMENT RECORD
+// =========================================================
+// Service complete hone ke baad call hoga.
+//
+// Body:
+// {
+//     "bookingId": "...",
+//     "serviceCompletedAt": 1234567890000
+// }
+//
+// IMPORTANT:
+// - Client commission/salonAmount nahi bhejega.
+// - Server Firebase booking se data lega.
+// - Actual settlement calculation service karegi.
+// =========================================================
+
+async function createSettlementRecord(
+    req,
+    res
+) {
+
+    try {
+
+        const bookingId =
+            String(
+                req.body?.bookingId || ""
+            ).trim();
+
+
+        const serviceCompletedAt =
+            Number(
+                req.body?.serviceCompletedAt || 0
+            );
+
+
+        if (!bookingId) {
+
+            return res.status(400).json({
+
+                success:
+                    false,
+
+                message:
+                    "Booking ID is required"
+
+            });
+        }
+
+
+        if (
+            !Number.isFinite(serviceCompletedAt) ||
+            serviceCompletedAt <= 0
+        ) {
+
+            return res.status(400).json({
+
+                success:
+                    false,
+
+                message:
+                    "Valid service completion time is required"
+
+            });
+        }
+
+
+        // =====================================================
+        // BOOKING LOAD
+        // =====================================================
+
+        const {
+            getDatabase
+        } = require("firebase-admin/database");
+
+
+        const db =
+            getDatabase();
+
+
+        const bookingSnapshot =
+            await db
+                .ref("Bookings")
+                .child(bookingId)
+                .once("value");
+
+
+        if (!bookingSnapshot.exists()) {
+
+            return res.status(404).json({
+
+                success:
+                    false,
+
+                message:
+                    "Booking not found"
+
+            });
+        }
+
+
+        const booking =
+            bookingSnapshot.val();
+
+
+        if (
+            !booking ||
+            typeof booking !== "object"
+        ) {
+
+            return res.status(400).json({
+
+                success:
+                    false,
+
+                message:
+                    "Invalid booking data"
+
+            });
+        }
+
+
+        // =====================================================
+        // SERVICE STATUS VALIDATION
+        // =====================================================
+
+        const bookingStatus =
+            String(
+                booking.status || ""
+            ).trim().toUpperCase();
+
+
+        if (
+            bookingStatus !==
+                "SERVICE_COMPLETED"
+        ) {
+
+            return res.status(400).json({
+
+                success:
+                    false,
+
+                message:
+                    "Service is not completed"
+
+            });
+        }
+
+
+        // =====================================================
+        // FIREBASE AUTH USER
+        // =====================================================
+
+        const authUid =
+            req.user?.uid ||
+            "";
+
+
+        if (!authUid) {
+
+            return res.status(401).json({
+
+                success:
+                    false,
+
+                message:
+                    "Authentication required"
+
+            });
+        }
+
+
+        // =====================================================
+        // BOOKING AUTHORIZATION
+        // =====================================================
+        // Booking ke partner/salon ko authenticated
+        // user's partner data se verify karna zaroori hai.
+        //
+        // Existing partner authentication structure ke
+        // exact fields verify hone ke baad is part ko
+        // tighten kiya ja sakta hai.
+        // =====================================================
+
+        const partnerId =
+            String(
+                booking.partnerId || ""
+            ).trim();
+
+
+        const salonId =
+            String(
+                booking.salonId || ""
+            ).trim();
+
+
+        if (!partnerId) {
+
+            return res.status(400).json({
+
+                success:
+                    false,
+
+                message:
+                    "Booking partner ID is missing"
+
+            });
+        }
+
+
+        if (!salonId) {
+
+            return res.status(400).json({
+
+                success:
+                    false,
+
+                message:
+                    "Booking salon ID is missing"
+
+            });
+        }
+
+
+        // =====================================================
+        // CREATE SETTLEMENT
+        // =====================================================
+
+        const settlementService =
+            require("./settlementService");
+
+
+        const result =
+            await settlementService
+                .createSettlementRecord({
+
+                    booking: {
+
+                        ...booking,
+
+                        bookingId:
+                            bookingId
+
+                    },
+
+                    serviceCompletedAt:
+                        serviceCompletedAt
+
+                });
+
+
+        return res.status(200).json({
+
+            success:
+                true,
+
+            message:
+                result.duplicate
+                    ? "Settlement record already exists"
+                    : "Settlement record created successfully",
+
+            duplicate:
+                result.duplicate,
+
+            settlementId:
+                result.settlementId,
+
+            settlement:
+                result.settlement
+
+        });
+
+    } catch (error) {
+
+        console.error(
+            "Create settlement record error:",
+            error
+        );
+
+
+        return res.status(500).json({
+
+            success:
+                false,
+
+            message:
+                error.message ||
+                "Unable to create settlement record"
+
+        });
+    }
+    }
+
 
 // =========================================================
 // EXPORT
