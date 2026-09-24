@@ -4,7 +4,8 @@
 // Responsibility:
 // - Admin settlement settings read/update karna
 // - Partner + Salon settlement preference read/update karna
-// - Actual settlement calculation/process nahi karna
+// - Settlement record create karna
+// - Actual settlement calculation/process settlementService karegi
 // - Koi settlement timing hardcode nahi karna
 //
 // IMPORTANT:
@@ -12,6 +13,7 @@
 // - Admin global settlement policy control karega.
 // - Partner apni allowed settlement preference select karega.
 // - Final payout settlement service karegi.
+// - Settlement creation sirf authenticated Partner ke liye hai.
 // =========================================================
 
 const settlementConfigService =
@@ -345,12 +347,14 @@ async function updatePartnerSettlementPreference(
     }
 }
 
+
 // =========================================================
 // CREATE SETTLEMENT RECORD
 // =========================================================
 // Service complete hone ke baad call hoga.
 //
 // Body:
+//
 // {
 //     "bookingId": "...",
 //     "serviceCompletedAt": 1234567890000
@@ -358,8 +362,12 @@ async function updatePartnerSettlementPreference(
 //
 // IMPORTANT:
 // - Client commission/salonAmount nahi bhejega.
-// - Server Firebase booking se data lega.
-// - Actual settlement calculation service karegi.
+// - Server Firebase booking se actual data lega.
+// - Authenticated Partner hi apni booking ka
+//   settlement record create kar sakta hai.
+// - Partner ID + Salon ID Firebase Custom Token
+//   claims se verify honge.
+// - Actual settlement calculation settlementService karegi.
 // =========================================================
 
 async function createSettlementRecord(
@@ -368,6 +376,101 @@ async function createSettlementRecord(
 ) {
 
     try {
+
+        // =====================================================
+        // FIREBASE AUTH USER
+        // =====================================================
+
+        const authUser =
+            req.user || {};
+
+
+        const authUid =
+            String(
+                authUser.uid || ""
+            ).trim();
+
+
+        const authRole =
+            String(
+                authUser.role || ""
+            ).trim().toLowerCase();
+
+
+        const authPartnerId =
+            String(
+                authUser.partnerId || ""
+            ).trim();
+
+
+        const authSalonId =
+            String(
+                authUser.salonId || ""
+            ).trim();
+
+
+        if (!authUid) {
+
+            return res.status(401).json({
+
+                success:
+                    false,
+
+                message:
+                    "Authentication required"
+
+            });
+        }
+
+
+        if (
+            authRole !==
+            "partner"
+        ) {
+
+            return res.status(403).json({
+
+                success:
+                    false,
+
+                message:
+                    "Partner authentication required"
+
+            });
+        }
+
+
+        if (!authPartnerId) {
+
+            return res.status(403).json({
+
+                success:
+                    false,
+
+                message:
+                    "Partner ID authentication mein nahi mila"
+
+            });
+        }
+
+
+        if (!authSalonId) {
+
+            return res.status(403).json({
+
+                success:
+                    false,
+
+                message:
+                    "Salon ID authentication mein nahi mila"
+
+            });
+        }
+
+
+        // =====================================================
+        // REQUEST DATA
+        // =====================================================
 
         const bookingId =
             String(
@@ -396,7 +499,9 @@ async function createSettlementRecord(
 
 
         if (
-            !Number.isFinite(serviceCompletedAt) ||
+            !Number.isFinite(
+                serviceCompletedAt
+            ) ||
             serviceCompletedAt <= 0
         ) {
 
@@ -418,7 +523,8 @@ async function createSettlementRecord(
 
         const {
             getDatabase
-        } = require("firebase-admin/database");
+        } =
+            require("firebase-admin/database");
 
 
         const db =
@@ -468,64 +574,7 @@ async function createSettlementRecord(
 
 
         // =====================================================
-        // SERVICE STATUS VALIDATION
-        // =====================================================
-
-        const bookingStatus =
-            String(
-                booking.status || ""
-            ).trim().toUpperCase();
-
-
-        if (
-            bookingStatus !==
-                "SERVICE_COMPLETED"
-        ) {
-
-            return res.status(400).json({
-
-                success:
-                    false,
-
-                message:
-                    "Service is not completed"
-
-            });
-        }
-
-
-        // =====================================================
-        // FIREBASE AUTH USER
-        // =====================================================
-
-        const authUid =
-            req.user?.uid ||
-            "";
-
-
-        if (!authUid) {
-
-            return res.status(401).json({
-
-                success:
-                    false,
-
-                message:
-                    "Authentication required"
-
-            });
-        }
-
-
-        // =====================================================
-        // BOOKING AUTHORIZATION
-        // =====================================================
-        // Booking ke partner/salon ko authenticated
-        // user's partner data se verify karna zaroori hai.
-        //
-        // Existing partner authentication structure ke
-        // exact fields verify hone ke baad is part ko
-        // tighten kiya ja sakta hai.
+        // BOOKING PARTNER / SALON
         // =====================================================
 
         const partnerId =
@@ -569,6 +618,75 @@ async function createSettlementRecord(
 
 
         // =====================================================
+        // PARTNER OWNERSHIP CHECK
+        // =====================================================
+        // Firebase Custom Token se aaye partnerId/salonId
+        // ko booking ke partnerId/salonId se exact match
+        // karna zaroori hai.
+        // =====================================================
+
+        if (
+            authPartnerId !==
+            partnerId
+        ) {
+
+            return res.status(403).json({
+
+                success:
+                    false,
+
+                message:
+                    "This booking does not belong to this Partner"
+
+            });
+        }
+
+
+        if (
+            authSalonId !==
+            salonId
+        ) {
+
+            return res.status(403).json({
+
+                success:
+                    false,
+
+                message:
+                    "This booking does not belong to this Salon"
+
+            });
+        }
+
+
+        // =====================================================
+        // SERVICE STATUS VALIDATION
+        // =====================================================
+
+        const bookingStatus =
+            String(
+                booking.status || ""
+            ).trim().toUpperCase();
+
+
+        if (
+            bookingStatus !==
+            "SERVICE_COMPLETED"
+        ) {
+
+            return res.status(400).json({
+
+                success:
+                    false,
+
+                message:
+                    "Service is not completed"
+
+            });
+        }
+
+
+        // =====================================================
         // CREATE SETTLEMENT
         // =====================================================
 
@@ -594,6 +712,10 @@ async function createSettlementRecord(
 
                 });
 
+
+        // =====================================================
+        // RESPONSE
+        // =====================================================
 
         return res.status(200).json({
 
@@ -635,7 +757,7 @@ async function createSettlementRecord(
 
         });
     }
-    }
+}
 
 
 // =========================================================
@@ -650,6 +772,8 @@ module.exports = {
 
     getPartnerSettlementPreference,
 
-    updatePartnerSettlementPreference
+    updatePartnerSettlementPreference,
+
+    createSettlementRecord
 
 };
