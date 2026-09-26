@@ -675,6 +675,20 @@ async function getPaymentIntent(
             .child(cleanId)
             .once("value");
 
+    console.log(
+    "PAYMENT SERVICES DEBUG:",
+    JSON.stringify({
+        salonId: cleanSalonId,
+        salonName: cleanSalonName,
+        partnerId: cleanPartnerId,
+        requestedServiceIds: uniqueIds,
+        servicesPath:
+            "Services/" + cleanSalonId,
+        firebaseServiceKeys:
+            Object.keys(snapshot.val() || {})
+    })
+);
+
 
     if (!snapshot.exists()) {
 
