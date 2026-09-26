@@ -218,17 +218,49 @@ async function getVerifiedServices({
 
     for (const serviceId of uniqueIds) {
 
-        const serviceSnapshot =
-            snapshot.child(serviceId);
+    let serviceSnapshot =
+        snapshot.child(serviceId);
 
 
-        if (!serviceSnapshot.exists()) {
+    // -------------------------------------------------
+    // FALLBACK:
+    // Some existing services may be stored as:
+    //
+    // Services/{salonId}/{serviceId}
+    //
+    // while older services may be stored as:
+    //
+    // Services/{salonId}/{salonName}/{serviceId}
+    // -------------------------------------------------
 
-            throw new Error(
-                "Selected service not found: " +
-                serviceId
-            );
+    if (!serviceSnapshot.exists()) {
+
+        const salonNameServicesRef =
+            db
+                .ref("Services")
+                .child(cleanSalonId)
+                .child(cleanSalonName);
+
+        const salonNameSnapshot =
+            await salonNameServicesRef
+                .child(serviceId)
+                .once("value");
+
+        if (salonNameSnapshot.exists()) {
+
+            serviceSnapshot =
+                salonNameSnapshot;
         }
+    }
+
+
+    if (!serviceSnapshot.exists()) {
+
+        throw new Error(
+            "Selected service not found: " +
+            serviceId
+        );
+    }
 
 
         const service =
