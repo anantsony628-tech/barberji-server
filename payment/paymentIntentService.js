@@ -55,7 +55,6 @@ function cleanString(value) {
         value === undefined ||
         value === null
     ) {
-
         return "";
     }
 
@@ -88,7 +87,6 @@ function parseServicePrice(price) {
         !Number.isFinite(numericPrice) ||
         numericPrice <= 0
     ) {
-
         throw new Error(
             "Invalid service price"
         );
@@ -134,9 +132,17 @@ async function getVerifiedServices({
     const cleanSalonName =
         cleanString(salonName);
 
-    const ids =
-        parseServiceIds(serviceIds);
+    const uniqueIds =
+        [
+            ...new Set(
+                parseServiceIds(serviceIds)
+            )
+        ];
 
+
+    // =====================================================
+    // BASIC VALIDATION
+    // =====================================================
 
     if (!cleanSalonId) {
 
@@ -162,7 +168,7 @@ async function getVerifiedServices({
     }
 
 
-    if (ids.length === 0) {
+    if (uniqueIds.length === 0) {
 
         throw new Error(
             "At least one service is required"
@@ -170,7 +176,7 @@ async function getVerifiedServices({
     }
 
 
-    if (ids.length > 20) {
+    if (uniqueIds.length > 20) {
 
         throw new Error(
             "Too many services selected"
@@ -178,86 +184,37 @@ async function getVerifiedServices({
     }
 
 
-    const uniqueIds =
-        [...new Set(ids)];
-
-
     // =====================================================
-    // SERVICES PATH
-    // =====================================================
-    //
-    // Current Firebase structure:
+    // CURRENT FIREBASE STRUCTURE
     //
     // Services
     //   └── SALON00008
-    //       ├── serviceId1
-    //       └── serviceId2
+    //       ├── -P1PvRbvYG6FRtO6TEXR
+    //       └── -P2JfTi37s-XgROLcaQA
     //
-    // Older structure support:
+    // OLD STRUCTURE ALSO SUPPORTED:
     //
     // Services
     //   └── SALON00008
-    //       └── salonName
+    //       └── sonu hair cut
     //           └── serviceId
-    //
-    // Direct service ID structure is checked FIRST.
     // =====================================================
 
-    const servicesRef =
+
+    const salonServicesRef =
         db
             .ref("Services")
             .child(cleanSalonId);
 
 
-    const snapshot =
-        await servicesRef.once("value");
-
-
-    console.log(
-        "PAYMENT SERVICES DEBUG:",
-        JSON.stringify({
-
-            salonId:
-                cleanSalonId,
-
-            salonName:
-                cleanSalonName,
-
-            partnerId:
-                cleanPartnerId,
-
-            requestedServiceIds:
-                uniqueIds,
-
-            servicesPath:
-                "Services/" +
-                cleanSalonId,
-
-            firebaseServiceKeys:
-                Object.keys(
-                    snapshot.val() || {}
-                )
-
-        })
-    );
-
-
-    if (!snapshot.exists()) {
-
-        throw new Error(
-            "Services not found for this salon"
-        );
-    }
-
+    // =====================================================
+    // VERIFY EACH SERVICE DIRECTLY
+    // =====================================================
 
     const verifiedServices = [];
 
     let totalAmount = 0;
 
-
-    // =====================================================
-    // VERIFY EACH SELECTED SERVICE
-    // =====================================================
 
     for (
         const serviceId
@@ -265,17 +222,19 @@ async function getVerifiedServices({
     ) {
 
         // -------------------------------------------------
-        // FIRST: CURRENT DIRECT STRUCTURE
+        // FIRST: CURRENT STRUCTURE
         //
         // Services/{salonId}/{serviceId}
         // -------------------------------------------------
 
         let serviceSnapshot =
-            snapshot.child(serviceId);
+            await salonServicesRef
+                .child(serviceId)
+                .once("value");
 
 
         // -------------------------------------------------
-        // FALLBACK: OLD STRUCTURE
+        // SECOND: OLD STRUCTURE
         //
         // Services/{salonId}/{salonName}/{serviceId}
         // -------------------------------------------------
@@ -283,9 +242,10 @@ async function getVerifiedServices({
         if (!serviceSnapshot.exists()) {
 
             serviceSnapshot =
-                snapshot
+                await salonServicesRef
                     .child(cleanSalonName)
-                    .child(serviceId);
+                    .child(serviceId)
+                    .once("value");
         }
 
 
@@ -383,7 +343,7 @@ async function getVerifiedServices({
 
 
         // -------------------------------------------------
-        // TOTAL
+        // TOTAL AMOUNT
         // -------------------------------------------------
 
         totalAmount +=
