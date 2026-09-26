@@ -181,7 +181,8 @@ async function getVerifiedServices({
     const servicesRef =
     db
         .ref("Services")
-        .child(cleanSalonId);
+        .child(cleanSalonId)
+        .child(cleanSalonName);
 
 
     const snapshot =
