@@ -51,8 +51,10 @@ const paymentCommissionService =
 
 function cleanString(value) {
 
-    if (value === undefined ||
-        value === null) {
+    if (
+        value === undefined ||
+        value === null
+    ) {
 
         return "";
     }
@@ -82,8 +84,10 @@ function parseServicePrice(price) {
     const numericPrice =
         Number(price);
 
-    if (!Number.isFinite(numericPrice) ||
-        numericPrice <= 0) {
+    if (
+        !Number.isFinite(numericPrice) ||
+        numericPrice <= 0
+    ) {
 
         throw new Error(
             "Invalid service price"
@@ -178,29 +182,64 @@ async function getVerifiedServices({
         [...new Set(ids)];
 
 
+    // =====================================================
+    // SERVICES PATH
+    // =====================================================
+    //
+    // Current Firebase structure:
+    //
+    // Services
+    //   └── SALON00008
+    //       ├── serviceId1
+    //       └── serviceId2
+    //
+    // Older structure support:
+    //
+    // Services
+    //   └── SALON00008
+    //       └── salonName
+    //           └── serviceId
+    //
+    // Direct service ID structure is checked FIRST.
+    // =====================================================
+
     const servicesRef =
-    db
-        .ref("Services")
-        .child(cleanSalonId)
-        .child(cleanSalonName);
+        db
+            .ref("Services")
+            .child(cleanSalonId);
 
 
     const snapshot =
         await servicesRef.once("value");
 
+
     console.log(
-    "PAYMENT SERVICES DEBUG:",
-    JSON.stringify({
-        salonId: cleanSalonId,
-        salonName: cleanSalonName,
-        partnerId: cleanPartnerId,
-        requestedServiceIds: uniqueIds,
-        servicesPath:
-            "Services/" + cleanSalonId,
-        firebaseServiceKeys:
-            Object.keys(snapshot.val() || {})
-    })
-);
+        "PAYMENT SERVICES DEBUG:",
+        JSON.stringify({
+
+            salonId:
+                cleanSalonId,
+
+            salonName:
+                cleanSalonName,
+
+            partnerId:
+                cleanPartnerId,
+
+            requestedServiceIds:
+                uniqueIds,
+
+            servicesPath:
+                "Services/" +
+                cleanSalonId,
+
+            firebaseServiceKeys:
+                Object.keys(
+                    snapshot.val() || {}
+                )
+
+        })
+    );
 
 
     if (!snapshot.exists()) {
@@ -216,59 +255,65 @@ async function getVerifiedServices({
     let totalAmount = 0;
 
 
-    for (const serviceId of uniqueIds) {
+    // =====================================================
+    // VERIFY EACH SELECTED SERVICE
+    // =====================================================
 
-    let serviceSnapshot =
-        snapshot.child(serviceId);
+    for (
+        const serviceId
+        of uniqueIds
+    ) {
+
+        // -------------------------------------------------
+        // FIRST: CURRENT DIRECT STRUCTURE
+        //
+        // Services/{salonId}/{serviceId}
+        // -------------------------------------------------
+
+        let serviceSnapshot =
+            snapshot.child(serviceId);
 
 
-    // -------------------------------------------------
-    // FALLBACK:
-    // Some existing services may be stored as:
-    //
-    // Services/{salonId}/{serviceId}
-    //
-    // while older services may be stored as:
-    //
-    // Services/{salonId}/{salonName}/{serviceId}
-    // -------------------------------------------------
+        // -------------------------------------------------
+        // FALLBACK: OLD STRUCTURE
+        //
+        // Services/{salonId}/{salonName}/{serviceId}
+        // -------------------------------------------------
 
-    if (!serviceSnapshot.exists()) {
-
-        const salonNameServicesRef =
-            db
-                .ref("Services")
-                .child(cleanSalonId)
-                .child(cleanSalonName);
-
-        const salonNameSnapshot =
-            await salonNameServicesRef
-                .child(serviceId)
-                .once("value");
-
-        if (salonNameSnapshot.exists()) {
+        if (!serviceSnapshot.exists()) {
 
             serviceSnapshot =
-                salonNameSnapshot;
+                snapshot
+                    .child(cleanSalonName)
+                    .child(serviceId);
         }
-    }
 
 
-    if (!serviceSnapshot.exists()) {
+        // -------------------------------------------------
+        // SERVICE NOT FOUND
+        // -------------------------------------------------
 
-        throw new Error(
-            "Selected service not found: " +
-            serviceId
-        );
-    }
+        if (!serviceSnapshot.exists()) {
 
+            throw new Error(
+                "Selected service not found: " +
+                serviceId
+            );
+        }
+
+
+        // -------------------------------------------------
+        // SERVICE DATA
+        // -------------------------------------------------
 
         const service =
             serviceSnapshot.val();
 
 
-        if (!service ||
-            typeof service !== "object") {
+        if (
+            !service ||
+            typeof service !== "object"
+        ) {
 
             throw new Error(
                 "Invalid service data: " +
@@ -277,20 +322,30 @@ async function getVerifiedServices({
         }
 
 
+        // -------------------------------------------------
+        // VERIFY PARTNER
+        // -------------------------------------------------
+
         const servicePartnerId =
             cleanString(
                 service.partnerId
             );
 
 
-        if (servicePartnerId !==
-            cleanPartnerId) {
+        if (
+            servicePartnerId !==
+            cleanPartnerId
+        ) {
 
             throw new Error(
                 "Service does not belong to this partner"
             );
         }
 
+
+        // -------------------------------------------------
+        // SERVICE NAME
+        // -------------------------------------------------
 
         const serviceName =
             cleanString(
@@ -307,11 +362,19 @@ async function getVerifiedServices({
         }
 
 
+        // -------------------------------------------------
+        // SERVICE PRICE
+        // -------------------------------------------------
+
         const price =
             parseServicePrice(
                 service.price
             );
 
+
+        // -------------------------------------------------
+        // SERVICE DURATION
+        // -------------------------------------------------
 
         const duration =
             cleanString(
@@ -319,8 +382,17 @@ async function getVerifiedServices({
             );
 
 
-        totalAmount += price;
+        // -------------------------------------------------
+        // TOTAL
+        // -------------------------------------------------
 
+        totalAmount +=
+            price;
+
+
+        // -------------------------------------------------
+        // VERIFIED SERVICE
+        // -------------------------------------------------
 
         verifiedServices.push({
 
@@ -338,9 +410,14 @@ async function getVerifiedServices({
 
             partnerId:
                 servicePartnerId
+
         });
     }
 
+
+    // =====================================================
+    // ROUND TOTAL
+    // =====================================================
 
     totalAmount =
         Math.round(
@@ -355,6 +432,10 @@ async function getVerifiedServices({
         );
     }
 
+
+    // =====================================================
+    // RETURN VERIFIED DATA
+    // =====================================================
 
     return {
 
@@ -372,6 +453,7 @@ async function getVerifiedServices({
 
         totalAmount:
             totalAmount
+
     };
 }
 
@@ -433,6 +515,10 @@ async function createPaymentIntent({
         cleanString(tokenNo);
 
 
+    // =====================================================
+    // AUTH
+    // =====================================================
+
     if (!cleanAuthUid) {
 
         throw new Error(
@@ -440,6 +526,10 @@ async function createPaymentIntent({
         );
     }
 
+
+    // =====================================================
+    // CUSTOMER ID
+    // =====================================================
 
     if (!cleanCustomerId) {
 
@@ -449,6 +539,10 @@ async function createPaymentIntent({
     }
 
 
+    // =====================================================
+    // CUSTOMER NAME
+    // =====================================================
+
     if (!cleanCustomerName) {
 
         throw new Error(
@@ -457,15 +551,25 @@ async function createPaymentIntent({
     }
 
 
-    if (!/^[6-9][0-9]{9}$/.test(
-        cleanCustomerMobile
-    )) {
+    // =====================================================
+    // CUSTOMER MOBILE
+    // =====================================================
+
+    if (
+        !/^[6-9][0-9]{9}$/.test(
+            cleanCustomerMobile
+        )
+    ) {
 
         throw new Error(
             "Invalid customer mobile number"
         );
     }
 
+
+    // =====================================================
+    // BOOKING DATE
+    // =====================================================
 
     if (!cleanBookingDate) {
 
@@ -475,6 +579,10 @@ async function createPaymentIntent({
     }
 
 
+    // =====================================================
+    // BOOKING TIME
+    // =====================================================
+
     if (!cleanBookingTime) {
 
         throw new Error(
@@ -483,9 +591,10 @@ async function createPaymentIntent({
     }
 
 
-    // -----------------------------------------------------
-    // VERIFY SERVICES + CALCULATE ACTUAL AMOUNT
-    // -----------------------------------------------------
+    // =====================================================
+    // VERIFY SERVICES
+    // + CALCULATE ACTUAL AMOUNT
+    // =====================================================
 
     const verified =
         await getVerifiedServices({
@@ -501,12 +610,13 @@ async function createPaymentIntent({
 
             serviceIds:
                 serviceIds
+
         });
 
 
-    // -----------------------------------------------------
+    // =====================================================
     // BACKEND COMMISSION
-    // -----------------------------------------------------
+    // =====================================================
 
     const commission =
         await paymentCommissionService
@@ -515,9 +625,9 @@ async function createPaymentIntent({
             );
 
 
-    // -----------------------------------------------------
+    // =====================================================
     // CREATE UNIQUE PAYMENT INTENT
-    // -----------------------------------------------------
+    // =====================================================
 
     const paymentIntentId =
         createPaymentIntentId();
@@ -525,13 +635,19 @@ async function createPaymentIntent({
 
     const receipt =
         paymentIntentId
-            .replace(/[^a-zA-Z0-9]/g, "")
-            .substring(0, 40);
+            .replace(
+                /[^a-zA-Z0-9]/g,
+                ""
+            )
+            .substring(
+                0,
+                40
+            );
 
 
-    // -----------------------------------------------------
+    // =====================================================
     // CREATE RAZORPAY ORDER
-    // -----------------------------------------------------
+    // =====================================================
 
     const razorpayOrder =
         await paymentService.createOrder({
@@ -558,13 +674,15 @@ async function createPaymentIntent({
 
                 partnerId:
                     verified.partnerId
+
             }
+
         });
 
 
-    // -----------------------------------------------------
+    // =====================================================
     // SAVE PAYMENT INTENT
-    // -----------------------------------------------------
+    // =====================================================
 
     const paymentIntent = {
 
@@ -600,7 +718,8 @@ async function createPaymentIntent({
 
         serviceIds:
             verified.services.map(
-                service => service.serviceId
+                service =>
+                    service.serviceId
             ),
 
         bookingDate:
@@ -643,17 +762,29 @@ async function createPaymentIntent({
             "CREATED",
 
         createdAt:
-    require("firebase-admin/database")
-        .ServerValue.TIMESTAMP
+            require(
+                "firebase-admin/database"
+            ).ServerValue.TIMESTAMP
+
     };
 
+
+    // =====================================================
+    // SAVE TO FIREBASE
+    // =====================================================
 
     await db
         .ref("BarberJi")
         .child("PaymentIntents")
         .child(paymentIntentId)
-        .set(paymentIntent);
+        .set(
+            paymentIntent
+        );
 
+
+    // =====================================================
+    // RETURN TO ANDROID
+    // =====================================================
 
     return {
 
@@ -691,6 +822,7 @@ async function createPaymentIntent({
 
         services:
             verified.services
+
     };
 }
 
@@ -704,7 +836,9 @@ async function getPaymentIntent(
 ) {
 
     const cleanId =
-        cleanString(paymentIntentId);
+        cleanString(
+            paymentIntentId
+        );
 
 
     if (!cleanId) {
@@ -722,8 +856,6 @@ async function getPaymentIntent(
             .child(cleanId)
             .once("value");
 
-    
-
 
     if (!snapshot.exists()) {
 
@@ -737,8 +869,10 @@ async function getPaymentIntent(
         snapshot.val();
 
 
-    if (!data ||
-        typeof data !== "object") {
+    if (
+        !data ||
+        typeof data !== "object"
+    ) {
 
         throw new Error(
             "Invalid payment intent"
@@ -748,13 +882,18 @@ async function getPaymentIntent(
 
     return {
 
-    ...data,
+        ...data,
 
-    paymentIntentId:
-        cleanId
-};
+        paymentIntentId:
+            cleanId
+
+    };
 }
 
+
+// =========================================================
+// EXPORT
+// =========================================================
 
 module.exports = {
 
@@ -763,4 +902,5 @@ module.exports = {
     getPaymentIntent,
 
     getVerifiedServices
+
 };
