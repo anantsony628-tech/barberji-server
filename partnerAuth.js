@@ -277,26 +277,54 @@ router.post(
                 .set(partnerAuthData);
 
             // =============================================
-            // RESPONSE
-            // =============================================
+// CREATE FIREBASE CUSTOM TOKEN
+//
+// Registration ke turant baad Android ko
+// isi new Partner UID se Firebase authenticate
+// karne ke liye temporary token diya jayega.
+//
+// Token store nahi kiya jayega.
+// =============================================
 
-            return res.status(201).json({
+const customToken =
+    await auth.createCustomToken(
+        authUid,
+        {
+            role:
+                "partner",
 
-                success:
-                    true,
+            partnerId:
+                partnerId,
 
-                message:
-                    "Partner authentication account created",
+            salonId:
+                salonId
+        }
+    );
 
-                authUid:
-                    authUid,
+// =============================================
+// RESPONSE
+// =============================================
 
-                partnerId:
-                    partnerId,
+return res.status(201).json({
 
-                salonId:
-                    salonId
-            });
+    success:
+        true,
+
+    message:
+        "Partner authentication account created",
+
+    customToken:
+        customToken,
+
+    authUid:
+        authUid,
+
+    partnerId:
+        partnerId,
+
+    salonId:
+        salonId
+});
 
         } catch (error) {
 
