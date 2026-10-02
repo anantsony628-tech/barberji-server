@@ -1,11 +1,12 @@
-const admin = require("firebase-admin");
+const { getDatabase } =
+    require("firebase-admin/database");
 
 class AdvertisementPaymentRepository {
 
     constructor() {
 
         this.db =
-            admin.database();
+    getDatabase();
 
         this.paymentsRef =
             this.db.ref(
