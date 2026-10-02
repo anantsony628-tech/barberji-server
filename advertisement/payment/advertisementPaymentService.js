@@ -924,5 +924,524 @@ class AdvertisementPaymentService {
             .savePaymentHistory(
                 advertisementPaymentId,
                 {
+                    advertisementId:
+                        paymentRecord.advertisementId,
+
+                    partnerId:
+                        paymentRecord.partnerId,
+
+                    salonId:
+                        paymentRecord.salonId,
+
+                    planId:
+                        paymentRecord.planId,
+
+                    amount:
+                        paymentRecord.amount,
+
+                    gateway:
+                        "RAZORPAY",
+
+                    gatewayOrderId:
+                        orderId,
+
+                    gatewayPaymentId:
+                        paymentId,
+
+                    status:
+                        "PAYMENT_VERIFIED",
+
+                    event:
+                        "PAYMENT_VERIFIED"
+                }
+            );
+
+
+        // =================================================
+        // CREATE PENDING ADVERTISEMENT
+        // =================================================
+
+        const advertisementId =
+            String(
+                paymentRecord.advertisementId || ""
+            ).trim();
+
+
+        if (!advertisementId) {
+
+            throw new Error(
+                "Advertisement ID not found in payment record"
+            );
+        }
+
+
+        const existingAdvertisementSnapshot =
+            await this.pendingAdvertisementsRef
+                .child(advertisementId)
+                .once("value");
+
+
+        if (
+            existingAdvertisementSnapshot.exists()
+        ) {
+
+            await this.repository
+                .updatePaymentRecord(
+                    advertisementPaymentId,
+                    {
+
+                        status:
+                            "ADVERTISEMENT_PENDING",
+
+                        advertisementCreatedAt:
+                            Date.now()
+                    }
+                );
+
+
+            return {
+
+                success:
+                    true,
+
+                verified:
+                    true,
+
+                alreadyProcessed:
+                    true,
+
+                advertisementId:
+                    advertisementId,
+
+                advertisementPaymentId:
+                    advertisementPaymentId,
+
+                status:
+                    "ADVERTISEMENT_PENDING"
+            };
+        }
+
+
+        // =================================================
+        // LOAD PAYMENT-SAVED ADVERTISEMENT DATA
+        // =================================================
+
+        const savedAuthUid =
+            String(
+                paymentRecord.authUid || ""
+            ).trim();
+
+
+        const savedSalonName =
+            String(
+                paymentRecord.salonName || ""
+            ).trim();
+
+
+        const savedOwnerName =
+            String(
+                paymentRecord.ownerName || ""
+            ).trim();
+
+
+        const savedPartnerMobile =
+            String(
+                paymentRecord.partnerMobile || ""
+            ).trim();
+
+
+        const savedPhotoUrl =
+            String(
+                paymentRecord.photoUrl ||
+                paymentRecord.photoPath ||
+                ""
+            ).trim();
+
+
+        const savedAdText =
+            String(
+                paymentRecord.adText || ""
+            ).trim();
+
+
+        const savedPlanName =
+            String(
+                paymentRecord.planName || ""
+            ).trim();
+
+
+        const savedPlanDays =
+            String(
+                paymentRecord.planDays || ""
+            ).trim();
+
+
+        if (!savedAuthUid) {
+
+            throw new Error(
+                "Authenticated user ID missing from payment record"
+            );
+        }
+
+
+        if (!savedSalonName) {
+
+            throw new Error(
+                "Salon name missing from payment record"
+            );
+        }
+
+
+        if (!savedOwnerName) {
+
+            throw new Error(
+                "Owner name missing from payment record"
+            );
+        }
+
+
+        if (!savedPhotoUrl) {
+
+            throw new Error(
+                "Advertisement image missing from payment record"
+            );
+        }
+
+
+        if (!savedAdText) {
+
+            throw new Error(
+                "Advertisement text missing from payment record"
+            );
+        }
+
+
+        // =================================================
+        // CREATE PENDING ADVERTISEMENT RECORD
+        // =================================================
+
+        const now =
+            Date.now();
+
+
+        const pendingAdvertisement = {
+
+            id:
+                advertisementId,
+
+            advertisementId:
+                advertisementId,
+
+            advertisementPaymentId:
+                advertisementPaymentId,
+
+            partnerId:
+                paymentRecord.partnerId,
+
+            salonId:
+                paymentRecord.salonId,
+
+            authUid:
+                savedAuthUid,
+
+            salonName:
+                savedSalonName,
+
+            ownerName:
+                savedOwnerName,
+
+            partnerMobile:
+                savedPartnerMobile,
+
+            planId:
+                paymentRecord.planId,
+
+            planName:
+                savedPlanName,
+
+            planDays:
+                savedPlanDays,
+
+            price:
+                Number(
+                    paymentRecord.amount
+                ),
+
+            amount:
+                Number(
+                    paymentRecord.amount
+                ),
+
+            currency:
+                "INR",
+
+            gateway:
+                "RAZORPAY",
+
+            gatewayOrderId:
+                orderId,
+
+            gatewayPaymentId:
+                paymentId,
+
+            gatewaySignature:
+                signature,
+
+            photoPath:
+                savedPhotoUrl,
+
+            photoUrl:
+                savedPhotoUrl,
+
+            adText:
+                savedAdText,
+
+            status:
+                "PENDING",
+
+            approvalStatus:
+                "PENDING",
+
+            paymentStatus:
+                "PAID",
+
+            createdAt:
+                now,
+
+            updatedAt:
+                now
+        };
+
+
+        await this.pendingAdvertisementsRef
+            .child(advertisementId)
+            .set(
+                pendingAdvertisement
+            );
+
+
+        // =================================================
+        // FINAL PAYMENT STATUS
+        // =================================================
+
+        await this.repository
+            .updatePaymentRecord(
+                advertisementPaymentId,
+                {
+
+                    status:
+                        "ADVERTISEMENT_PENDING",
+
+                    updatedAt:
+                        now,
+
+                    advertisementCreatedAt:
+                        now
+                }
+            );
+
+
+        // =================================================
+        // FINAL PAYMENT HISTORY
+        // =================================================
+
+        await this.repository
+            .savePaymentHistory(
+                advertisementPaymentId,
+                {
+
+                    advertisementId:
+                        advertisementId,
+
+                    partnerId:
+                        paymentRecord.partnerId,
+
+                    salonId:
+                        paymentRecord.salonId,
+
+                    planId:
+                        paymentRecord.planId,
+
+                    amount:
+                        paymentRecord.amount,
+
+                    gateway:
+                        "RAZORPAY",
+
+                    gatewayOrderId:
+                        orderId,
+
+                    gatewayPaymentId:
+                        paymentId,
+
+                    status:
+                        "ADVERTISEMENT_PENDING",
+
+                    event:
+                        "ADVERTISEMENT_CREATED"
+                }
+            );
+
+
+        // =================================================
+        // FINAL RESPONSE
+        // =================================================
+
+        return {
+
+            success:
+                true,
+
+            verified:
+                true,
+
+            alreadyProcessed:
+                false,
+
+            advertisementId:
+                advertisementId,
+
+            advertisementPaymentId:
+                advertisementPaymentId,
+
+            planId:
+                paymentRecord.planId,
+
+            amount:
+                Number(
+                    paymentRecord.amount
+                ),
+
+            currency:
+                "INR",
+
+            gateway:
+                "RAZORPAY",
+
+            orderId:
+                orderId,
+
+            paymentId:
+                paymentId,
+
+            status:
+                "ADVERTISEMENT_PENDING"
+        };
+    }
+
+
+    // =====================================================
+    // GENERATE ADVERTISEMENT ID
+    // =====================================================
+
+    async generateAdvertisementId() {
+
+        const counterRef =
+            this.db.ref(
+                "Counters/advertisementCounter"
+            );
+
+
+        const result =
+            await counterRef.transaction(
+                current => {
+
+                    const currentValue =
+                        Number(
+                            current || 0
+                        );
+
+                    return currentValue + 1;
+                }
+            );
+
+
+        const counter =
+            Number(
+                result.snapshot.val()
+            );
+
+
+        if (
+            !Number.isInteger(counter) ||
+            counter <= 0
+        ) {
+
+            throw new Error(
+                "Unable to generate advertisement ID"
+            );
+        }
+
+
+        return (
+            "AD" +
+            String(
+                counter
+            ).padStart(
+                6,
+                "0"
+            )
+        );
+    }
+
+
+    // =====================================================
+    // GENERATE ADVERTISEMENT PAYMENT ID
+    // =====================================================
+
+    async generatePaymentId() {
+
+        const counterRef =
+            this.db.ref(
+                "Counters/advertisementPaymentCounter"
+            );
+
+
+        const result =
+            await counterRef.transaction(
+                current => {
+
+                    const currentValue =
+                        Number(
+                            current || 0
+                        );
+
+                    return currentValue + 1;
+                }
+            );
+
+
+        const counter =
+            Number(
+                result.snapshot.val()
+            );
+
+
+        if (
+            !Number.isInteger(counter) ||
+            counter <= 0
+        ) {
+
+            throw new Error(
+                "Unable to generate advertisement payment ID"
+            );
+        }
+
+
+        return (
+            "ADPAY" +
+            String(
+                counter
+            ).padStart(
+                6,
+                "0"
+            )
+        );
+    }
+}
+
+
+module.exports =
+    AdvertisementPaymentService;
 
                   
