@@ -14,6 +14,7 @@
     "express": "^5.2.1",
     "firebase-admin": "^14.3.0" ,
     "bcryptjs": "^3.0.2" ,
-    "google-auth-library": "^10.4.0"
+    "google-auth-library": "^10.4.0",
+    "razorpay": "^2.9.6"
   }
 }
