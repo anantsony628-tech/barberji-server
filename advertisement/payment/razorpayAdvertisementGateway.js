@@ -11,10 +11,10 @@ class RazorpayAdvertisementGateway
         super();
 
         const keyId =
-            process.env.ADVERTISEMENT_RAZORPAY_KEY_ID;
+    process.env.RAZORPAY_KEY_ID;
 
-        const keySecret =
-            process.env.ADVERTISEMENT_RAZORPAY_KEY_SECRET;
+const keySecret =
+    process.env.RAZORPAY_KEY_SECRET;
 
         if (!keyId || !keySecret) {
 
