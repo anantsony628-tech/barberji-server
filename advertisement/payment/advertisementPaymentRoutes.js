@@ -18,17 +18,17 @@ const controller =
     new AdvertisementPaymentController();
 
 
-/*
- * =====================================================
- * CREATE ADVERTISEMENT PAYMENT ORDER
- * =====================================================
- *
- * POST /advertisement/payment/create-order
- *
- * Authentication:
- * Firebase ID Token
- *
- */
+// =====================================================
+// CREATE ADVERTISEMENT PAYMENT ORDER
+// =====================================================
+//
+// POST
+// /advertisement/payment/create-order
+//
+// Authentication:
+// Firebase ID Token
+//
+// =====================================================
 
 router.post(
     "/create-order",
@@ -39,6 +39,34 @@ router.post(
 
         await controller
             .createPaymentOrder(
+                req,
+                res
+            );
+    }
+);
+
+
+// =====================================================
+// VERIFY ADVERTISEMENT PAYMENT
+// =====================================================
+//
+// POST
+// /advertisement/payment/verify-payment
+//
+// Authentication:
+// Firebase ID Token
+//
+// =====================================================
+
+router.post(
+    "/verify-payment",
+
+    verifyAdvertisementUser,
+
+    async (req, res) => {
+
+        await controller
+            .verifyPayment(
                 req,
                 res
             );
