@@ -13,7 +13,7 @@ class AdvertisementPaymentService {
     constructor() {
 
         this.db =
-    getDatabase();
+            getDatabase();
 
         this.repository =
             new AdvertisementPaymentRepository();
@@ -25,12 +25,24 @@ class AdvertisementPaymentService {
             this.db.ref(
                 "AdvertisementPlans"
             );
+
+        this.pendingAdvertisementsRef =
+            this.db.ref(
+                "PendingAdvertisements"
+            );
     }
 
 
+    // =====================================================
+    // CREATE ADVERTISEMENT PAYMENT ORDER
+    // =====================================================
+
     async createPaymentOrder(data) {
 
-        if (!data || typeof data !== "object") {
+        if (
+            !data ||
+            typeof data !== "object"
+        ) {
 
             throw new Error(
                 "Advertisement payment data is required"
@@ -39,13 +51,59 @@ class AdvertisementPaymentService {
 
 
         const partnerId =
-            String(data.partnerId || "").trim();
+            String(
+                data.partnerId || ""
+            ).trim();
+
 
         const salonId =
-            String(data.salonId || "").trim();
+            String(
+                data.salonId || ""
+            ).trim();
+
 
         const planId =
-            String(data.planId || "").trim();
+            String(
+                data.planId || ""
+            ).trim();
+
+
+        const authUid =
+            String(
+                data.authUid || ""
+            ).trim();
+
+
+        const salonName =
+            String(
+                data.salonName || ""
+            ).trim();
+
+
+        const ownerName =
+            String(
+                data.ownerName || ""
+            ).trim();
+
+
+        const partnerMobile =
+            String(
+                data.partnerMobile || ""
+            ).trim();
+
+
+        const photoUrl =
+            String(
+                data.photoUrl ||
+                data.photoPath ||
+                ""
+            ).trim();
+
+
+        const adText =
+            String(
+                data.adText || ""
+            ).trim();
 
 
         if (!partnerId) {
@@ -72,11 +130,49 @@ class AdvertisementPaymentService {
         }
 
 
-        /*
-         * =====================================================
-         * LOAD AUTHORITATIVE ADVERTISEMENT PLAN
-         * =====================================================
-         */
+        if (!authUid) {
+
+            throw new Error(
+                "Authenticated user ID is required"
+            );
+        }
+
+
+        if (!salonName) {
+
+            throw new Error(
+                "Salon name is required"
+            );
+        }
+
+
+        if (!ownerName) {
+
+            throw new Error(
+                "Owner name is required"
+            );
+        }
+
+
+        if (!photoUrl) {
+
+            throw new Error(
+                "Advertisement image is required"
+            );
+        }
+
+
+        if (!adText) {
+
+            throw new Error(
+                "Advertisement text is required"
+            );
+        }
+
+
+        // =================================================
+        // LOAD AUTHORITATIVE PLAN
+        // =================================================
 
         const planSnapshot =
             await this.plansRef
@@ -97,7 +193,9 @@ class AdvertisementPaymentService {
 
 
         const planPrice =
-            Number(plan.price);
+            Number(
+                plan.price
+            );
 
 
         if (
@@ -111,11 +209,21 @@ class AdvertisementPaymentService {
         }
 
 
-        /*
-         * =====================================================
-         * GENERATE SERVER-SIDE IDs
-         * =====================================================
-         */
+        const planName =
+            String(
+                plan.planName || ""
+            ).trim();
+
+
+        const planDays =
+            String(
+                plan.days || ""
+            ).trim();
+
+
+        // =================================================
+        // SERVER-SIDE IDS
+        // =================================================
 
         const advertisementId =
             await this.generateAdvertisementId();
@@ -125,69 +233,26 @@ class AdvertisementPaymentService {
             await this.generatePaymentId();
 
 
-        /*
-         * =====================================================
-         * UNIQUE RAZORPAY RECEIPT
-         * =====================================================
-         */
+        // =================================================
+        // RAZORPAY RECEIPT
+        // =================================================
 
         const receipt =
             "ADREC_" +
             advertisementPaymentId;
 
 
-        /*
-         * =====================================================
-         * CREATE INTERNAL PAYMENT RECORD
-         * =====================================================
-         */
+        // =================================================
+        // CREATE INTERNAL PAYMENT RECORD
+        // =================================================
 
-        await this.repository.createPaymentRecord(
-            advertisementPaymentId,
-            {
-
-                advertisementId:
-                    advertisementId,
-
-                partnerId:
-                    partnerId,
-
-                salonId:
-                    salonId,
-
-                planId:
-                    planId,
-
-                amount:
-                    planPrice,
-
-                gateway:
-                    "RAZORPAY",
-
-                status:
-                    "CREATED"
-            }
-        );
-
-
-        /*
-         * =====================================================
-         * CREATE RAZORPAY ORDER
-         * =====================================================
-         */
-
-        let gatewayOrder;
-
-        try {
-
-            gatewayOrder =
-                await this.gateway.createOrder({
+        await this.repository
+            .createPaymentRecord(
+                advertisementPaymentId,
+                {
 
                     advertisementId:
                         advertisementId,
-
-                    advertisementPaymentId:
-                        advertisementPaymentId,
 
                     partnerId:
                         partnerId,
@@ -201,9 +266,88 @@ class AdvertisementPaymentService {
                     amount:
                         planPrice,
 
-                    receipt:
-                        receipt
-                });
+                    gateway:
+                        "RAZORPAY",
+
+                    status:
+                        "CREATED"
+                }
+            );
+
+
+        // =================================================
+        // SAVE VERIFIED USER + ADVERTISEMENT DATA
+        // =================================================
+
+        await this.repository
+            .updatePaymentRecord(
+                advertisementPaymentId,
+                {
+
+                    authUid:
+                        authUid,
+
+                    salonName:
+                        salonName,
+
+                    ownerName:
+                        ownerName,
+
+                    partnerMobile:
+                        partnerMobile,
+
+                    photoPath:
+                        photoUrl,
+
+                    photoUrl:
+                        photoUrl,
+
+                    adText:
+                        adText,
+
+                    planName:
+                        planName,
+
+                    planDays:
+                        planDays
+                }
+            );
+
+
+        // =================================================
+        // CREATE RAZORPAY ORDER
+        // =================================================
+
+        let gatewayOrder;
+
+
+        try {
+
+            gatewayOrder =
+                await this.gateway
+                    .createOrder({
+
+                        advertisementId:
+                            advertisementId,
+
+                        advertisementPaymentId:
+                            advertisementPaymentId,
+
+                        partnerId:
+                            partnerId,
+
+                        salonId:
+                            salonId,
+
+                        planId:
+                            planId,
+
+                        amount:
+                            planPrice,
+
+                        receipt:
+                            receipt
+                    });
 
         } catch (error) {
 
@@ -227,11 +371,9 @@ class AdvertisementPaymentService {
         }
 
 
-        /*
-         * =====================================================
-         * SAVE GATEWAY ORDER DETAILS
-         * =====================================================
-         */
+        // =================================================
+        // SAVE RAZORPAY ORDER
+        // =================================================
 
         await this.repository
             .updatePaymentRecord(
@@ -252,11 +394,9 @@ class AdvertisementPaymentService {
             );
 
 
-        /*
-         * =====================================================
-         * PAYMENT HISTORY
-         * =====================================================
-         */
+        // =================================================
+        // PAYMENT HISTORY
+        // =================================================
 
         await this.repository
             .savePaymentHistory(
@@ -295,11 +435,9 @@ class AdvertisementPaymentService {
             );
 
 
-        /*
-         * =====================================================
-         * RESPONSE
-         * =====================================================
-         */
+        // =================================================
+        // RESPONSE
+        // =================================================
 
         return {
 
@@ -324,6 +462,9 @@ class AdvertisementPaymentService {
             gateway:
                 "RAZORPAY",
 
+            keyId:
+                gatewayOrder.keyId,
+
             orderId:
                 gatewayOrder.orderId,
 
@@ -339,106 +480,449 @@ class AdvertisementPaymentService {
     }
 
 
-    /*
-     * =========================================================
-     * ADVERTISEMENT ID GENERATOR
-     * =========================================================
-     */
+    // =====================================================
+    // VERIFY ADVERTISEMENT PAYMENT
+    // =====================================================
 
-    async generateAdvertisementId() {
-
-        const counterRef =
-            this.db.ref(
-                "Counters/advertisementCounter"
-            );
-
-
-        const result =
-            await counterRef.transaction(
-                current => {
-
-                    const currentValue =
-                        Number(current || 0);
-
-                    return currentValue + 1;
-                }
-            );
-
-
-        const counter =
-            Number(
-                result.snapshot.val()
-            );
-
+    async verifyPayment(data) {
 
         if (
-            !Number.isInteger(counter) ||
-            counter <= 0
+            !data ||
+            typeof data !== "object"
         ) {
 
             throw new Error(
-                "Unable to generate advertisement ID"
+                "Advertisement payment verification data is required"
             );
         }
 
 
-        return (
-            "AD" +
-            String(counter).padStart(6, "0")
-        );
-    }
+        const advertisementPaymentId =
+            String(
+                data.advertisementPaymentId || ""
+            ).trim();
 
 
-    /*
-     * =========================================================
-     * ADVERTISEMENT PAYMENT ID GENERATOR
-     * =========================================================
-     */
-
-    async generatePaymentId() {
-
-        const counterRef =
-            this.db.ref(
-                "Counters/advertisementPaymentCounter"
-            );
+        const orderId =
+            String(
+                data.orderId || ""
+            ).trim();
 
 
-        const result =
-            await counterRef.transaction(
-                current => {
-
-                    const currentValue =
-                        Number(current || 0);
-
-                    return currentValue + 1;
-                }
-            );
+        const paymentId =
+            String(
+                data.paymentId || ""
+            ).trim();
 
 
-        const counter =
-            Number(
-                result.snapshot.val()
-            );
+        const signature =
+            String(
+                data.signature || ""
+            ).trim();
 
 
-        if (
-            !Number.isInteger(counter) ||
-            counter <= 0
-        ) {
+        const partnerId =
+            String(
+                data.partnerId || ""
+            ).trim();
+
+
+        const salonId =
+            String(
+                data.salonId || ""
+            ).trim();
+
+
+        if (!advertisementPaymentId) {
 
             throw new Error(
-                "Unable to generate advertisement payment ID"
+                "Advertisement payment ID is required"
             );
         }
 
 
-        return (
-            "ADPAY" +
-            String(counter).padStart(6, "0")
-        );
-    }
-}
+        if (!orderId) {
+
+            throw new Error(
+                "Razorpay order ID is required"
+            );
+        }
 
 
-module.exports =
-    AdvertisementPaymentService;
+        if (!paymentId) {
+
+            throw new Error(
+                "Razorpay payment ID is required"
+            );
+        }
+
+
+        if (!signature) {
+
+            throw new Error(
+                "Razorpay payment signature is required"
+            );
+        }
+
+
+        // =================================================
+        // LOAD INTERNAL PAYMENT
+        // =================================================
+
+        const paymentRecord =
+            await this.repository
+                .getPaymentById(
+                    advertisementPaymentId
+                );
+
+
+        if (!paymentRecord) {
+
+            throw new Error(
+                "Advertisement payment record not found"
+            );
+        }
+
+
+        // =================================================
+        // OWNERSHIP CHECK
+        // =================================================
+
+        if (
+            String(
+                paymentRecord.partnerId || ""
+            ).trim() !==
+            partnerId
+        ) {
+
+            throw new Error(
+                "Partner and payment mismatch"
+            );
+        }
+
+
+        if (
+            String(
+                paymentRecord.salonId || ""
+            ).trim() !==
+            salonId
+        ) {
+
+            throw new Error(
+                "Salon and payment mismatch"
+            );
+        }
+
+
+        // =================================================
+        // IDEMPOTENCY
+        // =================================================
+
+        const currentStatus =
+            String(
+                paymentRecord.status || ""
+            ).trim();
+
+
+        if (
+            currentStatus ===
+            "ADVERTISEMENT_PENDING"
+        ) {
+
+            return {
+
+                success:
+                    true,
+
+                alreadyProcessed:
+                    true,
+
+                verified:
+                    true,
+
+                advertisementId:
+                    paymentRecord.advertisementId,
+
+                advertisementPaymentId:
+                    advertisementPaymentId,
+
+                status:
+                    "ADVERTISEMENT_PENDING"
+            };
+        }
+
+
+        // =================================================
+        // ORDER ID MUST MATCH OUR DATABASE
+        // =================================================
+
+        const storedOrderId =
+            String(
+                paymentRecord.gatewayOrderId || ""
+            ).trim();
+
+
+        if (!storedOrderId) {
+
+            throw new Error(
+                "Stored Razorpay order ID not found"
+            );
+        }
+
+
+        if (
+            storedOrderId !==
+            orderId
+        ) {
+
+            throw new Error(
+                "Razorpay order ID mismatch"
+            );
+        }
+
+
+        // =================================================
+        // STATUS CHECK
+        // =================================================
+
+        if (
+            currentStatus !==
+            "ORDER_CREATED" &&
+            currentStatus !==
+            "PAYMENT_VERIFIED"
+        ) {
+
+            throw new Error(
+                "Advertisement payment is not ready for verification"
+            );
+        }
+
+
+        // =================================================
+        // RAZORPAY VERIFICATION
+        // =================================================
+
+        let verification;
+
+
+        try {
+
+            verification =
+                await this.gateway
+                    .verifyPayment({
+
+                        orderId:
+                            orderId,
+
+                        paymentId:
+                            paymentId,
+
+                        signature:
+                            signature
+                    });
+
+        } catch (error) {
+
+            await this.repository
+                .updatePaymentRecord(
+                    advertisementPaymentId,
+                    {
+
+                        status:
+                            "PAYMENT_VERIFICATION_FAILED",
+
+                        errorMessage:
+                            String(
+                                error.message ||
+                                "Advertisement payment verification failed"
+                            )
+                    }
+                );
+
+
+            await this.repository
+                .savePaymentHistory(
+                    advertisementPaymentId,
+                    {
+
+                        advertisementId:
+                            paymentRecord.advertisementId,
+
+                        partnerId:
+                            paymentRecord.partnerId,
+
+                        salonId:
+                            paymentRecord.salonId,
+
+                        planId:
+                            paymentRecord.planId,
+
+                        amount:
+                            paymentRecord.amount,
+
+                        gateway:
+                            "RAZORPAY",
+
+                        gatewayOrderId:
+                            orderId,
+
+                        gatewayPaymentId:
+                            paymentId,
+
+                        status:
+                            "PAYMENT_VERIFICATION_FAILED",
+
+                        event:
+                            "PAYMENT_VERIFICATION_FAILED"
+                    }
+                );
+
+
+            throw error;
+        }
+
+
+        if (
+            !verification ||
+            verification.success !== true ||
+            verification.verified !== true
+        ) {
+
+            throw new Error(
+                "Advertisement payment verification failed"
+            );
+        }
+
+
+        // =================================================
+        // SERVER-SIDE AMOUNT CHECK
+        // =================================================
+
+        const internalAmount =
+            Number(
+                paymentRecord.amount
+            );
+
+
+        const verifiedAmount =
+            Number(
+                verification.amount
+            );
+
+
+        if (
+            !Number.isInteger(
+                internalAmount
+            ) ||
+            internalAmount <= 0
+        ) {
+
+            throw new Error(
+                "Invalid internal advertisement payment amount"
+            );
+        }
+
+
+        if (
+            verifiedAmount !==
+            internalAmount
+        ) {
+
+            throw new Error(
+                "Advertisement payment amount mismatch"
+            );
+        }
+
+
+        // =================================================
+        // AUTHORITATIVE PLAN CHECK
+        // =================================================
+
+        const planId =
+            String(
+                paymentRecord.planId || ""
+            ).trim();
+
+
+        const planSnapshot =
+            await this.plansRef
+                .child(planId)
+                .once("value");
+
+
+        if (!planSnapshot.exists()) {
+
+            throw new Error(
+                "Advertisement plan not found during verification"
+            );
+        }
+
+
+        const plan =
+            planSnapshot.val();
+
+
+        const planPrice =
+            Number(
+                plan.price
+            );
+
+
+        if (
+            !Number.isInteger(planPrice) ||
+            planPrice <= 0
+        ) {
+
+            throw new Error(
+                "Invalid advertisement plan price"
+            );
+        }
+
+
+        if (
+            planPrice !==
+            internalAmount
+        ) {
+
+            throw new Error(
+                "Advertisement plan price mismatch"
+            );
+        }
+
+
+        // =================================================
+        // SAVE VERIFIED PAYMENT
+        // =================================================
+
+        await this.repository
+            .updatePaymentRecord(
+                advertisementPaymentId,
+                {
+
+                    gateway:
+                        "RAZORPAY",
+
+                    gatewayOrderId:
+                        orderId,
+
+                    gatewayPaymentId:
+                        paymentId,
+
+                    gatewaySignature:
+                        signature,
+
+                    status:
+                        "PAYMENT_VERIFIED",
+
+                    verifiedAt:
+                        Date.now()
+                }
+            );
+
+
+        await this.repository
+            .savePaymentHistory(
+                advertisementPaymentId,
+                {
+
+                  
