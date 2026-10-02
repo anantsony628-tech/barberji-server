@@ -11,20 +11,60 @@ class AdvertisementPaymentController {
     }
 
 
+    // =====================================================
+    // CREATE PAYMENT ORDER
+    // =====================================================
+
     async createPaymentOrder(req, res) {
 
         try {
 
+            if (!req.user) {
+
+                return res.status(401).json({
+
+                    success:
+                        false,
+
+                    message:
+                        "Authenticated user not found"
+                });
+            }
+
+
+            const requestData = {
+
+                ...(
+                    req.body || {}
+                ),
+
+                // -----------------------------------------
+                // NEVER TRUST THESE FROM ANDROID
+                // -----------------------------------------
+
+                partnerId:
+                    req.user.partnerId,
+
+                salonId:
+                    req.user.salonId,
+
+                authUid:
+                    req.user.uid
+            };
+
+
             const result =
                 await this.paymentService
                     .createPaymentOrder(
-                        req.body
+                        requestData
                     );
 
 
-            return res.status(200).json(
-                result
-            );
+            return res
+                .status(200)
+                .json(
+                    result
+                );
 
         } catch (error) {
 
@@ -34,15 +74,92 @@ class AdvertisementPaymentController {
             );
 
 
-            return res.status(400).json({
+            return res
+                .status(400)
+                .json({
 
-                success:
-                    false,
+                    success:
+                        false,
 
-                message:
-                    error.message ||
-                    "Unable to create advertisement payment order"
-            });
+                    message:
+                        error.message ||
+                        "Unable to create advertisement payment order"
+                });
+        }
+    }
+
+
+    // =====================================================
+    // VERIFY PAYMENT
+    // =====================================================
+
+    async verifyPayment(req, res) {
+
+        try {
+
+            if (!req.user) {
+
+                return res.status(401).json({
+
+                    success:
+                        false,
+
+                    message:
+                        "Authenticated user not found"
+                });
+            }
+
+
+            const requestData = {
+
+                ...(
+                    req.body || {}
+                ),
+
+                // -----------------------------------------
+                // VERIFIED FROM FIREBASE AUTH
+                // -----------------------------------------
+
+                partnerId:
+                    req.user.partnerId,
+
+                salonId:
+                    req.user.salonId
+            };
+
+
+            const result =
+                await this.paymentService
+                    .verifyPayment(
+                        requestData
+                    );
+
+
+            return res
+                .status(200)
+                .json(
+                    result
+                );
+
+        } catch (error) {
+
+            console.error(
+                "ADVERTISEMENT PAYMENT VERIFY ERROR:",
+                error
+            );
+
+
+            return res
+                .status(400)
+                .json({
+
+                    success:
+                        false,
+
+                    message:
+                        error.message ||
+                        "Unable to verify advertisement payment"
+                });
         }
     }
 }
