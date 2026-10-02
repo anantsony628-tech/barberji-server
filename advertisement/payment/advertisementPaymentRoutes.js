@@ -4,6 +4,11 @@ const express =
 const AdvertisementPaymentController =
     require("./advertisementPaymentController");
 
+const {
+    verifyAdvertisementUser
+} =
+    require("./advertisementPaymentAuth");
+
 
 const router =
     express.Router();
@@ -20,10 +25,16 @@ const controller =
  *
  * POST /advertisement/payment/create-order
  *
+ * Authentication:
+ * Firebase ID Token
+ *
  */
 
 router.post(
     "/create-order",
+
+    verifyAdvertisementUser,
+
     async (req, res) => {
 
         await controller
