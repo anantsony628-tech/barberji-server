@@ -1,4 +1,5 @@
-const admin = require("firebase-admin");
+const { getDatabase } =
+    require("firebase-admin/database");
 
 const AdvertisementPaymentRepository =
     require("./advertisementPaymentRepository");
@@ -12,7 +13,7 @@ class AdvertisementPaymentService {
     constructor() {
 
         this.db =
-            admin.database();
+    getDatabase();
 
         this.repository =
             new AdvertisementPaymentRepository();
