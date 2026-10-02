@@ -1,5 +1,8 @@
-const Razorpay = require("razorpay");
-const crypto = require("crypto");
+const Razorpay =
+    require("razorpay");
+
+const crypto =
+    require("crypto");
 
 const AdvertisementPaymentGateway =
     require("./advertisementPaymentGateway");
@@ -26,6 +29,13 @@ class RazorpayAdvertisementGateway
                 "Advertisement Razorpay configuration is missing"
             );
         }
+
+
+        this.keyId =
+            keyId;
+
+        this.keySecret =
+            keySecret;
 
 
         this.razorpay =
@@ -55,7 +65,9 @@ class RazorpayAdvertisementGateway
 
 
         const amount =
-            Number(paymentData.amount);
+            Number(
+                paymentData.amount
+            );
 
 
         if (
@@ -133,6 +145,9 @@ class RazorpayAdvertisementGateway
             gateway:
                 "RAZORPAY",
 
+            keyId:
+                this.keyId,
+
             orderId:
                 order.id,
 
@@ -164,10 +179,6 @@ class RazorpayAdvertisementGateway
             );
         }
 
-
-        // -------------------------------------------------
-        // REQUIRED VALUES
-        // -------------------------------------------------
 
         const orderId =
             String(
@@ -212,26 +223,14 @@ class RazorpayAdvertisementGateway
 
 
         // -------------------------------------------------
-        // GENERATE SERVER-SIDE SIGNATURE
+        // SERVER-SIDE HMAC SIGNATURE
         // -------------------------------------------------
-
-        const keySecret =
-            process.env.RAZORPAY_KEY_SECRET;
-
-
-        if (!keySecret) {
-
-            throw new Error(
-                "Razorpay secret is not configured"
-            );
-        }
-
 
         const generatedSignature =
             crypto
                 .createHmac(
                     "sha256",
-                    keySecret
+                    this.keySecret
                 )
                 .update(
                     orderId +
@@ -240,10 +239,6 @@ class RazorpayAdvertisementGateway
                 )
                 .digest("hex");
 
-
-        // -------------------------------------------------
-        // TIMING-SAFE SIGNATURE COMPARISON
-        // -------------------------------------------------
 
         const generatedBuffer =
             Buffer.from(
@@ -290,9 +285,11 @@ class RazorpayAdvertisementGateway
         // -------------------------------------------------
 
         const payment =
-            await this.razorpay.payments.fetch(
-                paymentId
-            );
+            await this.razorpay
+                .payments
+                .fetch(
+                    paymentId
+                );
 
 
         if (!payment) {
@@ -325,13 +322,15 @@ class RazorpayAdvertisementGateway
 
 
         // -------------------------------------------------
-        // FETCH ORIGINAL RAZORPAY ORDER
+        // FETCH RAZORPAY ORDER
         // -------------------------------------------------
 
         const order =
-            await this.razorpay.orders.fetch(
-                orderId
-            );
+            await this.razorpay
+                .orders
+                .fetch(
+                    orderId
+                );
 
 
         if (!order) {
@@ -343,7 +342,7 @@ class RazorpayAdvertisementGateway
 
 
         // -------------------------------------------------
-        // VERIFY PAYMENT AMOUNT
+        // AMOUNT CHECK
         // -------------------------------------------------
 
         if (
@@ -358,12 +357,13 @@ class RazorpayAdvertisementGateway
 
 
         // -------------------------------------------------
-        // VERIFY CURRENCY
+        // CURRENCY CHECK
         // -------------------------------------------------
 
         if (
-            String(payment.currency || "")
-                .toUpperCase() !== "INR"
+            String(
+                payment.currency || ""
+            ).toUpperCase() !== "INR"
         ) {
 
             throw new Error(
@@ -373,8 +373,9 @@ class RazorpayAdvertisementGateway
 
 
         if (
-            String(order.currency || "")
-                .toUpperCase() !== "INR"
+            String(
+                order.currency || ""
+            ).toUpperCase() !== "INR"
         ) {
 
             throw new Error(
@@ -404,20 +405,16 @@ class RazorpayAdvertisementGateway
         }
 
 
-        // -------------------------------------------------
-        // SUCCESS
-        // -------------------------------------------------
-
         return {
 
             success:
                 true,
 
-            gateway:
-                "RAZORPAY",
-
             verified:
                 true,
+
+            gateway:
+                "RAZORPAY",
 
             orderId:
                 orderId,
@@ -429,10 +426,14 @@ class RazorpayAdvertisementGateway
                 signature,
 
             amount:
-                Number(payment.amount) / 100,
+                Number(
+                    payment.amount
+                ) / 100,
 
             amountPaise:
-                Number(payment.amount),
+                Number(
+                    payment.amount
+                ),
 
             currency:
                 String(
