@@ -618,7 +618,7 @@ const razorpayAmount =
             amountPaise:
                 paymentBookingService
                     .rupeesToPaise(
-                        verified.totalAmount
+                        razorpayAmount
                     ),
 
             receipt:
