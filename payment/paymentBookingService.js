@@ -21,21 +21,19 @@
 // =========================================================
 
 const {
-    getDatabase,
-    ServerValue
+getDatabase,
+ServerValue
 } = require("firebase-admin/database");
 
 const crypto =
-    require("crypto");
-
+require("crypto");
 
 // =========================================================
 // FIREBASE DATABASE
 // =========================================================
 
 const db =
-    getDatabase();
-
+getDatabase();
 
 // =========================================================
 // CONVERT RUPEES TO PAISE
@@ -43,250 +41,250 @@ const db =
 
 function rupeesToPaise(amountRupees) {
 
-    const numericAmount =
-        Number(amountRupees);
+const numericAmount =  
+    Number(amountRupees);  
 
-    if (
-        !Number.isFinite(
-            numericAmount
-        ) ||
-        numericAmount <= 0
-    ) {
+if (  
+    !Number.isFinite(  
+        numericAmount  
+    ) ||  
+    numericAmount <= 0  
+) {  
 
-        throw new Error(
-            "Invalid booking amount"
-        );
-    }
-
-
-    const paise =
-        Math.round(
-            numericAmount * 100
-        );
+    throw new Error(  
+        "Invalid booking amount"  
+    );  
+}  
 
 
-    if (
-        !Number.isSafeInteger(
-            paise
-        ) ||
-        paise <= 0
-    ) {
-
-        throw new Error(
-            "Invalid payment amount"
-        );
-    }
+const paise =  
+    Math.round(  
+        numericAmount * 100  
+    );  
 
 
-    return paise;
+if (  
+    !Number.isSafeInteger(  
+        paise  
+    ) ||  
+    paise <= 0  
+) {  
+
+    throw new Error(  
+        "Invalid payment amount"  
+    );  
+}  
+
+
+return paise;
+
 }
-
 
 // =========================================================
 // GET BOOKING
 // =========================================================
 
 async function getBooking(
-    bookingId
+bookingId
 ) {
 
-    if (
-        !bookingId ||
-        String(bookingId).trim() === ""
-    ) {
+if (  
+    !bookingId ||  
+    String(bookingId).trim() === ""  
+) {  
 
-        throw new Error(
-            "Booking ID is required"
-        );
-    }
-
-
-    const cleanBookingId =
-        String(
-            bookingId
-        ).trim();
+    throw new Error(  
+        "Booking ID is required"  
+    );  
+}  
 
 
-    const snapshot =
-        await db
-            .ref(
-                `Bookings/${cleanBookingId}`
-            )
-            .once("value");
+const cleanBookingId =  
+    String(  
+        bookingId  
+    ).trim();  
 
 
-    if (
-        !snapshot.exists()
-    ) {
-
-        throw new Error(
-            "Booking not found"
-        );
-    }
+const snapshot =  
+    await db  
+        .ref(  
+            `Bookings/${cleanBookingId}`  
+        )  
+        .once("value");  
 
 
-    const booking =
-        snapshot.val();
+if (  
+    !snapshot.exists()  
+) {  
+
+    throw new Error(  
+        "Booking not found"  
+    );  
+}  
 
 
-    if (
-        !booking ||
-        typeof booking !== "object"
-    ) {
-
-        throw new Error(
-            "Invalid booking data"
-        );
-    }
+const booking =  
+    snapshot.val();  
 
 
-    return {
+if (  
+    !booking ||  
+    typeof booking !== "object"  
+) {  
 
-        bookingId:
-            cleanBookingId,
+    throw new Error(  
+        "Invalid booking data"  
+    );  
+}  
 
-        booking
-    };
+
+return {  
+
+    bookingId:  
+        cleanBookingId,  
+
+    booking  
+};
+
 }
-
 
 // =========================================================
 // VALIDATE BOOKING FOR PAYMENT
 // =========================================================
 
 async function validateBookingForPayment(
-    bookingId
+bookingId
 ) {
 
-    const result =
-        await getBooking(
-            bookingId
-        );
+const result =  
+    await getBooking(  
+        bookingId  
+    );  
 
 
-    const booking =
-        result.booking;
+const booking =  
+    result.booking;  
 
 
-    if (
-        !booking.customerId
-    ) {
+if (  
+    !booking.customerId  
+) {  
 
-        throw new Error(
-            "Customer ID missing in booking"
-        );
-    }
-
-
-    if (
-        !booking.salonId
-    ) {
-
-        throw new Error(
-            "Salon ID missing in booking"
-        );
-    }
+    throw new Error(  
+        "Customer ID missing in booking"  
+    );  
+}  
 
 
-    if (
-        !booking.serviceName
-    ) {
+if (  
+    !booking.salonId  
+) {  
 
-        throw new Error(
-            "Service missing in booking"
-        );
-    }
-
-
-    const bookingAmount =
-        Number(
-            booking.bookingAmount
-        );
+    throw new Error(  
+        "Salon ID missing in booking"  
+    );  
+}  
 
 
-    if (
-        !Number.isFinite(
-            bookingAmount
-        ) ||
-        bookingAmount <= 0
-    ) {
+if (  
+    !booking.serviceName  
+) {  
 
-        throw new Error(
-            "Invalid booking amount"
-        );
-    }
+    throw new Error(  
+        "Service missing in booking"  
+    );  
+}  
 
 
-    const amountPaise =
-        rupeesToPaise(
-            bookingAmount
-        );
+const bookingAmount =  
+    Number(  
+        booking.bookingAmount  
+    );  
 
 
-    const authUid =
-        booking.authUid
-            ? String(
-                booking.authUid
-            )
-            : "";
+if (  
+    !Number.isFinite(  
+        bookingAmount  
+    ) ||  
+    bookingAmount <= 0  
+) {  
+
+    throw new Error(  
+        "Invalid booking amount"  
+    );  
+}  
 
 
-    const customerAuthUid =
-        booking.customerAuthUid
-            ? String(
-                booking.customerAuthUid
-            )
-            : "";
+const amountPaise =  
+    rupeesToPaise(  
+        bookingAmount  
+    );  
 
 
-    return {
+const authUid =  
+    booking.authUid  
+        ? String(  
+            booking.authUid  
+        )  
+        : "";  
 
-        bookingId:
-            result.bookingId,
 
-        customerId:
-            String(
-                booking.customerId
-            ),
+const customerAuthUid =  
+    booking.customerAuthUid  
+        ? String(  
+            booking.customerAuthUid  
+        )  
+        : "";  
 
-        salonId:
-            String(
-                booking.salonId
-            ),
 
-        partnerId:
-            booking.partnerId
-                ? String(
-                    booking.partnerId
-                )
-                : "",
+return {  
 
-        serviceName:
-            String(
-                booking.serviceName
-            ),
+    bookingId:  
+        result.bookingId,  
 
-        bookingAmount:
-            bookingAmount,
+    customerId:  
+        String(  
+            booking.customerId  
+        ),  
 
-        amountPaise:
-            amountPaise,
+    salonId:  
+        String(  
+            booking.salonId  
+        ),  
 
-        paymentMode:
-            booking.paymentMode
-                ? String(
-                    booking.paymentMode
-                )
-                : "",
+    partnerId:  
+        booking.partnerId  
+            ? String(  
+                booking.partnerId  
+            )  
+            : "",  
 
-        authUid:
-            authUid,
+    serviceName:  
+        String(  
+            booking.serviceName  
+        ),  
 
-        customerAuthUid:
-            customerAuthUid
-    };
+    bookingAmount:  
+        bookingAmount,  
+
+    amountPaise:  
+        amountPaise,  
+
+    paymentMode:  
+        booking.paymentMode  
+            ? String(  
+                booking.paymentMode  
+            )  
+            : "",  
+
+    authUid:  
+        authUid,  
+
+    customerAuthUid:  
+        customerAuthUid  
+};
+
 }
-
 
 // =========================================================
 // CREATE OTP
@@ -294,14 +292,14 @@ async function validateBookingForPayment(
 
 function createBookingOtp() {
 
-    return String(
-        crypto.randomInt(
-            1000,
-            10000
-        )
-    );
-}
+return String(  
+    crypto.randomInt(  
+        1000,  
+        10000  
+    )  
+);
 
+}
 
 // =========================================================
 // CREATE BOOKING ID
@@ -309,54 +307,54 @@ function createBookingOtp() {
 
 function createBookingId() {
 
-    return (
-        "BJ" +
-        Date.now() +
-        crypto
-            .randomBytes(3)
-            .toString("hex")
-            .toUpperCase()
-    );
-}
+return (  
+    "BJ" +  
+    Date.now() +  
+    crypto  
+        .randomBytes(3)  
+        .toString("hex")  
+        .toUpperCase()  
+);
 
+}
 
 // =========================================================
 // GET SERVICE NAME
 // =========================================================
 
 function getServiceName(
-    services
+services
 ) {
 
-    if (!Array.isArray(services)) {
+if (!Array.isArray(services)) {  
 
-        return "";
-    }
-
-
-    return services
-        .map(service => {
-
-            if (
-                !service ||
-                typeof service !== "object"
-            ) {
-
-                return "";
-            }
+    return "";  
+}  
 
 
-            return String(
-                service.name || ""
-            ).trim();
+return services  
+    .map(service => {  
 
-        })
-        .filter(
-            name => name !== ""
-        )
-        .join(", ");
+        if (  
+            !service ||  
+            typeof service !== "object"  
+        ) {  
+
+            return "";  
+        }  
+
+
+        return String(  
+            service.name || ""  
+        ).trim();  
+
+    })  
+    .filter(  
+        name => name !== ""  
+    )  
+    .join(", ");
+
 }
-
 
 // =========================================================
 // FINALIZE PAYMENT BOOKING
@@ -376,740 +374,606 @@ function getServiceName(
 // =========================================================
 
 async function finalizePaymentBooking({
-    paymentIntent,
-    razorpayPaymentId
+paymentIntent,
+razorpayPaymentId
 }) {
 
-    if (
-        !paymentIntent ||
-        typeof paymentIntent !== "object"
-    ) {
+if (  
+    !paymentIntent ||  
+    typeof paymentIntent !== "object"  
+) {  
 
-        throw new Error(
-            "Invalid payment intent"
-        );
-    }
+    throw new Error(  
+        "Invalid payment intent"  
+    );  
+}  
 
 
-    const paymentIntentId =
-        String(
-            paymentIntent.paymentIntentId || ""
-        ).trim();
+const paymentIntentId =  
+    String(  
+        paymentIntent.paymentIntentId || ""  
+    ).trim();  
 
 
-    if (!paymentIntentId) {
+if (!paymentIntentId) {  
 
-        throw new Error(
-            "Payment intent ID is missing"
-        );
-    }
+    throw new Error(  
+        "Payment intent ID is missing"  
+    );  
+}  
 
 
-    const cleanPaymentId =
-        String(
-            razorpayPaymentId || ""
-        ).trim();
+const cleanPaymentId =  
+    String(  
+        razorpayPaymentId || ""  
+    ).trim();  
 
 
-    if (!cleanPaymentId) {
+if (!cleanPaymentId) {  
 
-        throw new Error(
-            "Razorpay payment ID is missing"
-        );
-    }
+    throw new Error(  
+        "Razorpay payment ID is missing"  
+    );  
+}  
 
 
-    // =====================================================
-    // READ STORED PAYMENT INTENT
-    // =====================================================
+// =====================================================  
+// READ STORED PAYMENT INTENT  
+// =====================================================  
 
-    const paymentIntentRef =
-        db
-            .ref("BarberJi")
-            .child("PaymentIntents")
-            .child(paymentIntentId);
+const paymentIntentRef =  
+    db  
+        .ref("BarberJi")  
+        .child("PaymentIntents")  
+        .child(paymentIntentId);  
 
 
-    const snapshot =
-        await paymentIntentRef.once(
-            "value"
-        );
+const snapshot =  
+    await paymentIntentRef.once(  
+        "value"  
+    );  
 
 
-    if (!snapshot.exists()) {
+if (!snapshot.exists()) {  
 
-        throw new Error(
-            "Payment intent not found"
-        );
-    }
+    throw new Error(  
+        "Payment intent not found"  
+    );  
+}  
 
 
-    const storedIntent =
-        snapshot.val();
+const storedIntent =  
+    snapshot.val();  
 
 
-    if (
-        !storedIntent ||
-        typeof storedIntent !== "object"
-    ) {
+if (  
+    !storedIntent ||  
+    typeof storedIntent !== "object"  
+) {  
 
-        throw new Error(
-            "Invalid stored payment intent"
-        );
-    }
+    throw new Error(  
+        "Invalid stored payment intent"  
+    );  
+}  
 
 
-    // =====================================================
-    // DUPLICATE PROTECTION
-    // =====================================================
+// =====================================================  
+// DUPLICATE PROTECTION  
+// =====================================================  
 
-    if (
-        storedIntent.status === "BOOKED" &&
-        storedIntent.bookingId
-    ) {
+if (  
+    storedIntent.status === "BOOKED" &&  
+    storedIntent.bookingId  
+) {  
 
-        return {
+    return {  
 
-            success: true,
+        success: true,  
 
-            duplicate: true,
+        duplicate: true,  
 
-            bookingId:
-                String(
-                    storedIntent.bookingId
-                ),
+        bookingId:  
+            String(  
+                storedIntent.bookingId  
+            ),  
 
-            paymentIntentId:
-                paymentIntentId,
+        paymentIntentId:  
+            paymentIntentId,  
 
-            paymentId:
-                storedIntent.paymentId ||
-                cleanPaymentId,
+        paymentId:  
+            storedIntent.paymentId ||  
+            cleanPaymentId,  
 
-            otp:
-                storedIntent.otp ||
-                "",
+        otp:  
+            storedIntent.otp ||  
+            "",  
 
-            tokenNo:
-                storedIntent.tokenNo ||
-                ""
-        };
-    }
+        tokenNo:  
+            storedIntent.tokenNo ||  
+            ""  
+    };  
+}  
 
 
-    // =====================================================
-    // PAYMENT INTENT STATUS CHECK
-    // =====================================================
+// =====================================================  
+// PAYMENT INTENT STATUS CHECK  
+// =====================================================  
 
-    if (
-        storedIntent.status !== "CREATED"
-    ) {
+if (  
+    storedIntent.status !== "CREATED"  
+) {  
 
-        throw new Error(
-            "Payment intent is not available for booking"
-        );
-    }
+    throw new Error(  
+        "Payment intent is not available for booking"  
+    );  
+}  
 
 
-    // =====================================================
-    // REQUIRED DATA
-    // =====================================================
+// =====================================================  
+// REQUIRED DATA  
+// =====================================================  
 
-    const customerId =
-        String(
-            storedIntent.customerId || ""
-        ).trim();
+const customerId =  
+    String(  
+        storedIntent.customerId || ""  
+    ).trim();  
 
 
-    const customerName =
-        String(
-            storedIntent.customerName || ""
-        ).trim();
+const customerName =  
+    String(  
+        storedIntent.customerName || ""  
+    ).trim();  
 
 
-    const customerMobile =
-        String(
-            storedIntent.customerMobile || ""
-        ).trim();
+const customerMobile =  
+    String(  
+        storedIntent.customerMobile || ""  
+    ).trim();  
 
 
-    const salonId =
-        String(
-            storedIntent.salonId || ""
-        ).trim();
+const salonId =  
+    String(  
+        storedIntent.salonId || ""  
+    ).trim();  
 
 
-    const partnerId =
-        String(
-            storedIntent.partnerId || ""
-        ).trim();
+const partnerId =  
+    String(  
+        storedIntent.partnerId || ""  
+    ).trim();  
 
 
-    const salonName =
-        String(
-            storedIntent.salonName || ""
-        ).trim();
+const salonName =  
+    String(  
+        storedIntent.salonName || ""  
+    ).trim();  
 
 
-    const ownerMobile =
-        String(
-            storedIntent.ownerMobile || ""
-        ).trim();
+const ownerMobile =  
+    String(  
+        storedIntent.ownerMobile || ""  
+    ).trim();  
 
 
-    const bookingDate =
-        String(
-            storedIntent.bookingDate || ""
-        ).trim();
+const bookingDate =  
+    String(  
+        storedIntent.bookingDate || ""  
+    ).trim();  
 
 
-    const bookingTime =
-        String(
-            storedIntent.bookingTime || ""
-        ).trim();
+const bookingTime =  
+    String(  
+        storedIntent.bookingTime || ""  
+    ).trim();  
 
 
-    const paymentMode =
-        String(
-            storedIntent.paymentMode || "UPI"
-        ).trim();
+const paymentMode =  
+    String(  
+        storedIntent.paymentMode || "UPI"  
+    ).trim();  
 
 
-    const bookingAmount =
-        Number(
-            storedIntent.bookingAmount || 0
-        );
+const bookingAmount =  
+    Number(  
+        storedIntent.bookingAmount || 0  
+    );  
 
 
-    const commission =
-        Number(
-            storedIntent.commission || 0
-        );
+const commission =  
+    Number(  
+        storedIntent.commission || 0  
+    );  
 
 
-    const salonAmount =
-        Number(
-            storedIntent.salonAmount || 0
-        );
+const salonAmount =  
+    Number(  
+        storedIntent.salonAmount || 0  
+    );  
 
 
-    if (!customerId) {
+if (!customerId) {  
 
-        throw new Error(
-            "Customer ID missing"
-        );
-    }
+    throw new Error(  
+        "Customer ID missing"  
+    );  
+}  
 
 
-    if (!salonId) {
+if (!salonId) {  
 
-        throw new Error(
-            "Salon ID missing"
-        );
-    }
+    throw new Error(  
+        "Salon ID missing"  
+    );  
+}  
 
 
-    if (!partnerId) {
+if (!partnerId) {  
 
-        throw new Error(
-            "Partner ID missing"
-        );
-    }
+    throw new Error(  
+        "Partner ID missing"  
+    );  
+}  
 
 
-    if (!salonName) {
+if (!salonName) {  
 
-        throw new Error(
-            "Salon name missing"
-        );
-    }
+    throw new Error(  
+        "Salon name missing"  
+    );  
+}  
 
 
-    if (!bookingDate) {
+if (!bookingDate) {  
 
-        throw new Error(
-            "Booking date missing"
-        );
-    }
+    throw new Error(  
+        "Booking date missing"  
+    );  
+}  
 
 
-    if (!bookingTime) {
+if (!bookingTime) {  
 
-        throw new Error(
-            "Booking time missing"
-        );
-    }
+    throw new Error(  
+        "Booking time missing"  
+    );  
+}  
 
 
-    if (
-        !Number.isFinite(
-            bookingAmount
-        ) ||
-        bookingAmount <= 0
-    ) {
+if (  
+    !Number.isFinite(  
+        bookingAmount  
+    ) ||  
+    bookingAmount <= 0  
+) {  
 
-        throw new Error(
-            "Invalid booking amount"
-        );
-    }
+    throw new Error(  
+        "Invalid booking amount"  
+    );  
+}  
 
 
-    // =====================================================
-    // PAYMENT AMOUNT SAFETY
-    // =====================================================
+// =====================================================  
+// PAYMENT AMOUNT SAFETY  
+// =====================================================  
 
-    const amountPaise =
-        rupeesToPaise(
-            bookingAmount
-        );
+const amountPaise =  
+    rupeesToPaise(  
+        bookingAmount  
+    );  
 
 
-    const storedRazorpayAmountPaise =
-        Number(
-            storedIntent.razorpayAmountPaise || 0
-        );
+const storedRazorpayAmountPaise =  
+    Number(  
+        storedIntent.razorpayAmountPaise || 0  
+    );  
 
 
-    if (
-        storedRazorpayAmountPaise <= 0
-    ) {
+if (  
+    storedRazorpayAmountPaise <= 0  
+) {  
 
-        throw new Error(
-            "Invalid Razorpay amount in payment intent"
-        );
-    }
+    throw new Error(  
+        "Invalid Razorpay amount in payment intent"  
+    );  
+}  
 
 
-    if (
-        amountPaise !==
-        storedRazorpayAmountPaise
-    ) {
+if (  
+    amountPaise !==  
+    storedRazorpayAmountPaise  
+) {  
 
-        throw new Error(
-            "Payment amount mismatch"
-        );
-    }
+    throw new Error(  
+        "Payment amount mismatch"  
+    );  
+}  
 
 
-    // =====================================================
-    // GENERATE BOOKING ID + OTP
-    // =====================================================
+// =====================================================  
+// GENERATE BOOKING ID + OTP  
+// =====================================================  
 
-    const bookingId =
-        createBookingId();
+const bookingId =  
+    createBookingId();  
 
 
-    const otp =
-        createBookingOtp();
+const otp =  
+    createBookingOtp();  
 
 
-    // =====================================================
-// GENERATE DAILY SALON BOOKING TOKEN
-// =====================================================
-//
-// currentToken = currently running/serving token
-// tokenNo      = newly assigned booking token
-//
-// IMPORTANT:
-// - currentToken ko new booking touch nahi karegi.
-// - Har booking date ka token counter alag rahega.
-// - Existing bookings ke highest token se safe migration hogi.
-//
-// Firebase:
-// BarberJi/TokenCounters/{salonId}/{dateKey}/lastToken
-// =====================================================
+// =====================================================  
+// GENERATE SALON TOKEN  
+// =====================================================  
+// Transaction ensures two simultaneous bookings  
+// do not receive the same token.  
+// =====================================================  
 
-const tokenDateKey =
-    bookingDate
-        .replace(/\//g, "-")
-        .replace(/\s+/g, "_")
-        .trim();
+const salonTokenRef =  
+    db  
+        .ref("ApprovedSalons")  
+        .child(salonId)  
+        .child("currentToken");  
 
 
-if (!tokenDateKey) {
+const tokenTransaction =  
+    await salonTokenRef.transaction(  
+        currentValue => {  
 
-    throw new Error(
-        "Invalid booking date for token generation"
-    );
+            const current =  
+                Number(  
+                    currentValue || 0  
+                );  
+
+
+            return current + 1;  
+        }  
+    );  
+
+
+if (  
+    !tokenTransaction.committed  
+) {  
+
+    throw new Error(  
+        "Unable to generate booking token"  
+    );  
+}  
+
+
+const tokenNo =  
+    Number(  
+        tokenTransaction.snapshot.val()  
+    );  
+
+
+if (  
+    !Number.isFinite(  
+        tokenNo  
+    ) ||  
+    tokenNo <= 0  
+) {  
+
+    throw new Error(  
+        "Invalid booking token"  
+    );  
+}  
+
+
+// =====================================================  
+// SERVICE NAME  
+// =====================================================  
+
+const serviceName =  
+    getServiceName(  
+        storedIntent.services  
+    );  
+
+
+// =====================================================  
+// FINAL BOOKING OBJECT  
+// =====================================================  
+
+const booking = {  
+
+    orderId:  
+        bookingId,  
+
+    bookingId:  
+        bookingId,  
+
+    paymentIntentId:  
+        paymentIntentId,  
+
+    paymentId:  
+        cleanPaymentId,  
+
+    authUid:  
+        storedIntent.authUid || "",  
+
+    customerAuthUid:  
+        storedIntent.customerAuthUid || "",  
+
+    customerId:  
+        customerId,  
+
+    customerName:  
+        customerName,  
+
+    customerMobile:  
+        customerMobile,  
+
+    salonId:  
+        salonId,  
+
+    partnerId:  
+        partnerId,  
+
+    salonName:  
+        salonName,  
+
+    ownerMobile:  
+        ownerMobile,  
+
+    serviceName:  
+        serviceName,  
+
+    serviceIds:  
+        Array.isArray(  
+            storedIntent.serviceIds  
+        )  
+            ? storedIntent.serviceIds  
+            : [],  
+
+    services:  
+        Array.isArray(  
+            storedIntent.services  
+        )  
+            ? storedIntent.services  
+            : [],  
+
+    bookingDate:  
+        bookingDate,  
+
+    bookingTime:  
+        bookingTime,  
+
+    bookingCreatedTime:  
+        ServerValue.TIMESTAMP,  
+
+    tokenNo:  
+        tokenNo,  
+
+    otp:  
+        otp,  
+
+    paymentMode:  
+        paymentMode,  
+
+    bookingAmount:  
+        bookingAmount,  
+
+    commission:  
+        commission,  
+
+    paidOnline:  
+        bookingAmount,  
+
+    payAtSalon:  
+        0,  
+
+    salonAmount:  
+        salonAmount,  
+
+    status:  
+        "BOOKED"  
+};  
+
+
+// =====================================================  
+// FIREBASE ATOMIC UPDATE  
+// =====================================================  
+
+const updates = {};  
+
+
+updates[  
+    "Bookings/" +  
+    bookingId  
+] =  
+    booking;  
+
+
+updates[  
+    "BarberJi/PaymentIntents/" +  
+    paymentIntentId +  
+    "/status"  
+] =  
+    "BOOKED";  
+
+
+updates[  
+    "BarberJi/PaymentIntents/" +  
+    paymentIntentId +  
+    "/bookingId"  
+] =  
+    bookingId;  
+
+
+updates[  
+    "BarberJi/PaymentIntents/" +  
+    paymentIntentId +  
+    "/paymentId"  
+] =  
+    cleanPaymentId;  
+
+
+updates[  
+    "BarberJi/PaymentIntents/" +  
+    paymentIntentId +  
+    "/otp"  
+] =  
+    otp;  
+
+
+updates[  
+    "BarberJi/PaymentIntents/" +  
+    paymentIntentId +  
+    "/tokenNo"  
+] =  
+    tokenNo;  
+
+
+updates[  
+    "BarberJi/PaymentIntents/" +  
+    paymentIntentId +  
+    "/verifiedAt"  
+] =  
+    ServerValue.TIMESTAMP;  
+
+
+await db  
+    .ref()  
+    .update(  
+        updates  
+    );  
+
+
+// =====================================================  
+// RESULT  
+// =====================================================  
+
+return {  
+
+    success: true,  
+
+    duplicate: false,  
+
+    bookingId:  
+        bookingId,  
+
+    paymentIntentId:  
+        paymentIntentId,  
+
+    paymentId:  
+        cleanPaymentId,  
+
+    otp:  
+        otp,  
+
+    tokenNo:  
+        tokenNo,  
+
+    bookingAmount:  
+        bookingAmount,  
+
+    commission:  
+        commission,  
+
+    salonAmount:  
+        salonAmount  
+};
+
 }
-
-
-// =====================================================
-// DAILY TOKEN COUNTER REFERENCE
-// =====================================================
-
-const dailyTokenRef =
-    db
-        .ref("BarberJi")
-        .child("TokenCounters")
-        .child(salonId)
-        .child(tokenDateKey)
-        .child("lastToken");
-
-
-// =====================================================
-// INITIALIZE COUNTER IF NOT PRESENT
-// =====================================================
-//
-// Existing old bookings ko dekhkar highest token nikala jayega.
-// Isse migration ke baad duplicate token nahi milega.
-// =====================================================
-
-const dailyCounterSnapshot =
-    await dailyTokenRef.once("value");
-
-
-if (!dailyCounterSnapshot.exists()) {
-
-    const bookingsSnapshot =
-        await db
-            .ref("Bookings")
-            .orderByChild("salonId")
-            .equalTo(salonId)
-            .once("value");
-
-
-    let highestExistingToken = 0;
-
-
-    bookingsSnapshot.forEach(
-        bookingSnapshot => {
-
-            const existingBookingDate =
-                String(
-                    bookingSnapshot
-                        .child("bookingDate")
-                        .val() || ""
-                ).trim();
-
-
-            // -------------------------------------------------
-            // Sirf SAME booking date ke tokens consider honge.
-            // -------------------------------------------------
-
-            if (
-                existingBookingDate !==
-                bookingDate
-            ) {
-
-                return;
-            }
-
-
-            const existingToken =
-                Number(
-                    bookingSnapshot
-                        .child("tokenNo")
-                        .val() || 0
-                );
-
-
-            if (
-                Number.isFinite(
-                    existingToken
-                ) &&
-                existingToken >
-                    highestExistingToken
-            ) {
-
-                highestExistingToken =
-                    existingToken;
-            }
-        }
-    );
-
-
-    // ---------------------------------------------------------
-    // No existing booking:
-    // counter = 0
-    //
-    // Existing highest token:
-    // counter = highest token
-    // ---------------------------------------------------------
-
-    await dailyTokenRef.set(
-        highestExistingToken
-    );
-}
-
-
-// =====================================================
-// ATOMIC DAILY TOKEN INCREMENT
-// =====================================================
-//
-// Example:
-//
-// Booking 1 -> 1
-// Booking 2 -> 2
-// Booking 3 -> 3
-//
-// Simultaneous bookings mein Firebase transaction
-// duplicate token prevent karega.
-// =====================================================
-
-const tokenTransaction =
-    await dailyTokenRef.transaction(
-        currentValue => {
-
-            const current =
-                Number(
-                    currentValue || 0
-                );
-
-
-            return current + 1;
-        }
-    );
-
-
-if (
-    !tokenTransaction.committed
-) {
-
-    throw new Error(
-        "Unable to generate booking token"
-    );
-}
-
-
-// =====================================================
-// FINAL TOKEN NUMBER
-// =====================================================
-
-const tokenNo =
-    Number(
-        tokenTransaction.snapshot.val()
-    );
-
-
-if (
-    !Number.isFinite(
-        tokenNo
-    ) ||
-    tokenNo <= 0
-) {
-
-    throw new Error(
-        "Invalid booking token"
-    );
-}
-
-
-    // =====================================================
-    // SERVICE NAME
-    // =====================================================
-
-    const serviceName =
-        getServiceName(
-            storedIntent.services
-        );
-
-
-    // =====================================================
-    // FINAL BOOKING OBJECT
-    // =====================================================
-
-    const booking = {
-
-        orderId:
-            bookingId,
-
-        bookingId:
-            bookingId,
-
-        paymentIntentId:
-            paymentIntentId,
-
-        paymentId:
-            cleanPaymentId,
-
-        authUid:
-            storedIntent.authUid || "",
-
-        customerAuthUid:
-            storedIntent.customerAuthUid || "",
-
-        customerId:
-            customerId,
-
-        customerName:
-            customerName,
-
-        customerMobile:
-            customerMobile,
-
-        salonId:
-            salonId,
-
-        partnerId:
-            partnerId,
-
-        salonName:
-            salonName,
-
-        ownerMobile:
-            ownerMobile,
-
-        serviceName:
-            serviceName,
-
-        serviceIds:
-            Array.isArray(
-                storedIntent.serviceIds
-            )
-                ? storedIntent.serviceIds
-                : [],
-
-        services:
-            Array.isArray(
-                storedIntent.services
-            )
-                ? storedIntent.services
-                : [],
-
-        bookingDate:
-            bookingDate,
-
-        bookingTime:
-            bookingTime,
-
-        bookingCreatedTime:
-            ServerValue.TIMESTAMP,
-
-        tokenNo:
-            tokenNo,
-
-        otp:
-            otp,
-
-        paymentMode:
-            paymentMode,
-
-        bookingAmount:
-            bookingAmount,
-
-        commission:
-            commission,
-
-        paidOnline:
-            bookingAmount,
-
-        payAtSalon:
-            0,
-
-        salonAmount:
-            salonAmount,
-
-        status:
-            "BOOKED"
-    };
-
-
-    // =====================================================
-    // FIREBASE ATOMIC UPDATE
-    // =====================================================
-
-    const updates = {};
-
-
-    updates[
-        "Bookings/" +
-        bookingId
-    ] =
-        booking;
-
-
-    updates[
-        "BarberJi/PaymentIntents/" +
-        paymentIntentId +
-        "/status"
-    ] =
-        "BOOKED";
-
-
-    updates[
-        "BarberJi/PaymentIntents/" +
-        paymentIntentId +
-        "/bookingId"
-    ] =
-        bookingId;
-
-
-    updates[
-        "BarberJi/PaymentIntents/" +
-        paymentIntentId +
-        "/paymentId"
-    ] =
-        cleanPaymentId;
-
-
-    updates[
-        "BarberJi/PaymentIntents/" +
-        paymentIntentId +
-        "/otp"
-    ] =
-        otp;
-
-
-    updates[
-        "BarberJi/PaymentIntents/" +
-        paymentIntentId +
-        "/tokenNo"
-    ] =
-        tokenNo;
-
-
-    updates[
-        "BarberJi/PaymentIntents/" +
-        paymentIntentId +
-        "/verifiedAt"
-    ] =
-        ServerValue.TIMESTAMP;
-
-
-    await db
-        .ref()
-        .update(
-            updates
-        );
-
-
-    // =====================================================
-    // RESULT
-    // =====================================================
-
-    return {
-
-        success: true,
-
-        duplicate: false,
-
-        bookingId:
-            bookingId,
-
-        paymentIntentId:
-            paymentIntentId,
-
-        paymentId:
-            cleanPaymentId,
-
-        otp:
-            otp,
-
-        tokenNo:
-            tokenNo,
-
-        bookingAmount:
-            bookingAmount,
-
-        commission:
-            commission,
-
-        salonAmount:
-            salonAmount
-    };
-}
-
 
 // =========================================================
 // EXPORT
@@ -1117,11 +981,12 @@ if (
 
 module.exports = {
 
-    rupeesToPaise,
+rupeesToPaise,  
 
-    getBooking,
+getBooking,  
 
-    validateBookingForPayment,
+validateBookingForPayment,  
 
-    finalizePaymentBooking
+finalizePaymentBooking
+
 };
