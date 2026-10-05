@@ -734,62 +734,159 @@ const otp =
     createBookingOtp();  
 
 
-// =====================================================  
-// GENERATE SALON TOKEN  
-// =====================================================  
-// Transaction ensures two simultaneous bookings  
-// do not receive the same token.  
-// =====================================================  
+// =====================================================
+// GENERATE DAILY SALON BOOKING TOKEN
+// =====================================================
+//
+// currentToken = currently running/serving token
+// tokenNo      = newly assigned booking token
+//
+// IMPORTANT:
+// - currentToken ko new booking touch nahi karegi.
+// - Har booking date ka token counter alag rahega.
+// - Existing bookings ke highest token se safe migration hogi.
+//
+// Firebase:
+// BarberJi/TokenCounters/{salonId}/{dateKey}/lastToken
+// =====================================================
 
-const salonTokenRef =  
-    db  
-        .ref("ApprovedSalons")  
-        .child(salonId)  
-        .child("currentToken");  
+const tokenDateKey =
+    bookingDate
+        .replace(/\//g, "-")
+        .replace(/\s+/g, "_")
+        .trim();
 
+if (!tokenDateKey) {
 
-const tokenTransaction =  
-    await salonTokenRef.transaction(  
-        currentValue => {  
-
-            const current =  
-                Number(  
-                    currentValue || 0  
-                );  
-
-
-            return current + 1;  
-        }  
-    );  
-
-
-if (  
-    !tokenTransaction.committed  
-) {  
-
-    throw new Error(  
-        "Unable to generate booking token"  
-    );  
-}  
+    throw new Error(
+        "Invalid booking date for token generation"
+    );
+}
 
 
-const tokenNo =  
-    Number(  
-        tokenTransaction.snapshot.val()  
-    );  
+// =====================================================
+// DAILY TOKEN COUNTER REFERENCE
+// =====================================================
+
+const dailyTokenRef =
+    db
+        .ref("BarberJi")
+        .child("TokenCounters")
+        .child(salonId)
+        .child(tokenDateKey)
+        .child("lastToken");
 
 
-if (  
-    !Number.isFinite(  
-        tokenNo  
-    ) ||  
-    tokenNo <= 0  
-) {  
+// =====================================================
+// INITIALIZE COUNTER IF NOT PRESENT
+// =====================================================
 
-    throw new Error(  
-        "Invalid booking token"  
-    );  
-}  
+const dailyCounterSnapshot =
+    await dailyTokenRef.once("value");
+
+if (!dailyCounterSnapshot.exists()) {
+
+    const bookingsSnapshot =
+        await db
+            .ref("Bookings")
+            .orderByChild("salonId")
+            .equalTo(salonId)
+            .once("value");
+
+    let highestExistingToken = 0;
+
+    bookingsSnapshot.forEach(
+        bookingSnapshot => {
+
+            const existingBookingDate =
+                String(
+                    bookingSnapshot
+                        .child("bookingDate")
+                        .val() || ""
+                ).trim();
+
+            if (
+                existingBookingDate !==
+                bookingDate
+            ) {
+
+                return;
+            }
+
+            const existingToken =
+                Number(
+                    bookingSnapshot
+                        .child("tokenNo")
+                        .val() || 0
+                );
+
+            if (
+                Number.isFinite(
+                    existingToken
+                ) &&
+                existingToken >
+                    highestExistingToken
+            ) {
+
+                highestExistingToken =
+                    existingToken;
+            }
+        }
+    );
+
+    await dailyTokenRef.set(
+        highestExistingToken
+    );
+}
+
+
+// =====================================================
+// ATOMIC DAILY TOKEN INCREMENT
+// =====================================================
+
+const tokenTransaction =
+    await dailyTokenRef.transaction(
+        currentValue => {
+
+            const current =
+                Number(
+                    currentValue || 0
+                );
+
+            return current + 1;
+        }
+    );
+
+if (
+    !tokenTransaction.committed
+) {
+
+    throw new Error(
+        "Unable to generate booking token"
+    );
+}
+
+
+// =====================================================
+// FINAL TOKEN NUMBER
+// =====================================================
+
+const tokenNo =
+    Number(
+        tokenTransaction.snapshot.val()
+    );
+
+if (
+    !Number.isFinite(
+        tokenNo
+    ) ||
+    tokenNo <= 0
+) {
+
+    throw new Error(
+        "Invalid booking token"
+    );
+}
 
 
 // =====================================================  
