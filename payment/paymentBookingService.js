@@ -710,42 +710,85 @@ async function finalizePaymentBooking({
     // do not receive the same token.
     // =====================================================
 
-    const salonTokenRef =
-        db
-            .ref("ApprovedSalons")
-            .child(salonId)
-            .child("currentToken");
+    // =========================================================
+// BOOKING TOKEN GENERATION
+// =========================================================
+// currentToken = currently running/serving token
+// lastToken    = last token assigned to a new booking
+//
+// IMPORTANT:
+// Existing salons may not have lastToken yet.
+// Therefore, when lastToken is missing, initialize it
+// from the highest existing booking token for this salon.
+// This prevents duplicate token numbers after migration.
+// =========================================================
 
+const approvedSalonRef =
+    db.ref("ApprovedSalons").child(salonId);
 
-    const tokenTransaction =
-        await salonTokenRef.transaction(
-            currentValue => {
+const lastTokenRef =
+    approvedSalonRef.child("lastToken");
 
-                const current =
-                    Number(
-                        currentValue || 0
-                    );
+let lastTokenSnapshot =
+    await lastTokenRef.get();
 
+if (!lastTokenSnapshot.exists()) {
 
-                return current + 1;
-            }
-        );
+    // ---------------------------------------------------------
+    // FIRST-TIME MIGRATION
+    // Find the highest token already used by this salon.
+    // ---------------------------------------------------------
 
+    const bookingsSnapshot =
+        await db.ref("Bookings")
+            .orderByChild("salonId")
+            .equalTo(salonId)
+            .get();
 
-    if (
-        !tokenTransaction.committed
-    ) {
+    let highestExistingToken = 0;
 
-        throw new Error(
-            "Unable to generate booking token"
-        );
-    }
+    bookingsSnapshot.forEach(bookingSnapshot => {
 
+        const bookingToken =
+            Number(
+                bookingSnapshot.child("tokenNo").val() || 0
+            );
 
-    const tokenNo =
-        Number(
-            tokenTransaction.snapshot.val()
-        );
+        if (bookingToken > highestExistingToken) {
+            highestExistingToken = bookingToken;
+        }
+    });
+
+    // ---------------------------------------------------------
+    // If no booking token exists, start from 0.
+    // Otherwise continue after the highest existing token.
+    // ---------------------------------------------------------
+
+    await lastTokenRef.set(highestExistingToken);
+}
+
+// ---------------------------------------------------------
+// ATOMIC TOKEN INCREMENT
+// ---------------------------------------------------------
+
+const tokenTransaction =
+    await lastTokenRef.transaction(currentValue => {
+
+        const current =
+            Number(currentValue || 0);
+
+        return current + 1;
+    });
+
+if (!tokenTransaction.committed) {
+
+    throw new Error(
+        "Unable to generate booking token"
+    );
+}
+
+const tokenNo =
+    Number(tokenTransaction.snapshot.val());
 
 
     if (
