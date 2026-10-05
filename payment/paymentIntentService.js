@@ -423,31 +423,19 @@ async function getVerifiedServices({
 // =========================================================
 
 async function createPaymentIntent({
-
-    authUid,
-
-    customerId,
-
-    customerName,
-
-    customerMobile,
-
-    salonId,
-
-    partnerId,
-
-    salonName,
-
-    ownerMobile,
-
-    serviceIds,
-
-    bookingDate,
-
-    bookingTime,
-
-    tokenNo
-
+  authUid,
+  customerId,
+  customerName,
+  customerMobile,
+  salonId,
+  partnerId,
+  salonName,
+  ownerMobile,
+  serviceIds,
+  bookingDate,
+  bookingTime,
+  tokenNo,
+  paymentMode
 }) {
 
     const cleanAuthUid =
