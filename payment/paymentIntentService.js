@@ -572,6 +572,21 @@ async function createPaymentIntent({
                 verified.totalAmount
             );
 
+    const normalizedPaymentMode =
+  String(paymentMode || "Cash").trim().toUpperCase();
+
+if (
+  normalizedPaymentMode !== "CASH" &&
+  normalizedPaymentMode !== "UPI"
+) {
+  throw new Error("Invalid payment mode");
+}
+
+const razorpayAmount =
+  normalizedPaymentMode === "CASH"
+    ? commission.commission
+    : verified.totalAmount;
+
 
     // =====================================================
     // CREATE UNIQUE PAYMENT INTENT
