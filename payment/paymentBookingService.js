@@ -704,104 +704,195 @@ async function finalizePaymentBooking({
 
 
     // =====================================================
-    // GENERATE SALON TOKEN
-    // =====================================================
-    // Transaction ensures two simultaneous bookings
-    // do not receive the same token.
-    // =====================================================
-
-    // =========================================================
-// BOOKING TOKEN GENERATION
-// =========================================================
+// GENERATE DAILY SALON BOOKING TOKEN
+// =====================================================
+//
 // currentToken = currently running/serving token
-// lastToken    = last token assigned to a new booking
+// tokenNo      = newly assigned booking token
 //
 // IMPORTANT:
-// Existing salons may not have lastToken yet.
-// Therefore, when lastToken is missing, initialize it
-// from the highest existing booking token for this salon.
-// This prevents duplicate token numbers after migration.
-// =========================================================
+// - currentToken ko new booking touch nahi karegi.
+// - Har booking date ka token counter alag rahega.
+// - Existing bookings ke highest token se safe migration hogi.
+//
+// Firebase:
+// BarberJi/TokenCounters/{salonId}/{dateKey}/lastToken
+// =====================================================
 
-const approvedSalonRef =
-    db.ref("ApprovedSalons").child(salonId);
+const tokenDateKey =
+    bookingDate
+        .replace(/\//g, "-")
+        .replace(/\s+/g, "_")
+        .trim();
 
-const lastTokenRef =
-    approvedSalonRef.child("lastToken");
 
-let lastTokenSnapshot =
-    await lastTokenRef.get();
+if (!tokenDateKey) {
 
-if (!lastTokenSnapshot.exists()) {
+    throw new Error(
+        "Invalid booking date for token generation"
+    );
+}
 
-    // ---------------------------------------------------------
-    // FIRST-TIME MIGRATION
-    // Find the highest token already used by this salon.
-    // ---------------------------------------------------------
+
+// =====================================================
+// DAILY TOKEN COUNTER REFERENCE
+// =====================================================
+
+const dailyTokenRef =
+    db
+        .ref("BarberJi")
+        .child("TokenCounters")
+        .child(salonId)
+        .child(tokenDateKey)
+        .child("lastToken");
+
+
+// =====================================================
+// INITIALIZE COUNTER IF NOT PRESENT
+// =====================================================
+//
+// Existing old bookings ko dekhkar highest token nikala jayega.
+// Isse migration ke baad duplicate token nahi milega.
+// =====================================================
+
+const dailyCounterSnapshot =
+    await dailyTokenRef.once("value");
+
+
+if (!dailyCounterSnapshot.exists()) {
 
     const bookingsSnapshot =
-        await db.ref("Bookings")
+        await db
+            .ref("Bookings")
             .orderByChild("salonId")
             .equalTo(salonId)
-            .get();
+            .once("value");
+
 
     let highestExistingToken = 0;
 
-    bookingsSnapshot.forEach(bookingSnapshot => {
 
-        const bookingToken =
-            Number(
-                bookingSnapshot.child("tokenNo").val() || 0
-            );
+    bookingsSnapshot.forEach(
+        bookingSnapshot => {
 
-        if (bookingToken > highestExistingToken) {
-            highestExistingToken = bookingToken;
+            const existingBookingDate =
+                String(
+                    bookingSnapshot
+                        .child("bookingDate")
+                        .val() || ""
+                ).trim();
+
+
+            // -------------------------------------------------
+            // Sirf SAME booking date ke tokens consider honge.
+            // -------------------------------------------------
+
+            if (
+                existingBookingDate !==
+                bookingDate
+            ) {
+
+                return;
+            }
+
+
+            const existingToken =
+                Number(
+                    bookingSnapshot
+                        .child("tokenNo")
+                        .val() || 0
+                );
+
+
+            if (
+                Number.isFinite(
+                    existingToken
+                ) &&
+                existingToken >
+                    highestExistingToken
+            ) {
+
+                highestExistingToken =
+                    existingToken;
+            }
         }
-    });
+    );
+
 
     // ---------------------------------------------------------
-    // If no booking token exists, start from 0.
-    // Otherwise continue after the highest existing token.
+    // No existing booking:
+    // counter = 0
+    //
+    // Existing highest token:
+    // counter = highest token
     // ---------------------------------------------------------
 
-    await lastTokenRef.set(highestExistingToken);
+    await dailyTokenRef.set(
+        highestExistingToken
+    );
 }
 
-// ---------------------------------------------------------
-// ATOMIC TOKEN INCREMENT
-// ---------------------------------------------------------
+
+// =====================================================
+// ATOMIC DAILY TOKEN INCREMENT
+// =====================================================
+//
+// Example:
+//
+// Booking 1 -> 1
+// Booking 2 -> 2
+// Booking 3 -> 3
+//
+// Simultaneous bookings mein Firebase transaction
+// duplicate token prevent karega.
+// =====================================================
 
 const tokenTransaction =
-    await lastTokenRef.transaction(currentValue => {
+    await dailyTokenRef.transaction(
+        currentValue => {
 
-        const current =
-            Number(currentValue || 0);
+            const current =
+                Number(
+                    currentValue || 0
+                );
 
-        return current + 1;
-    });
 
-if (!tokenTransaction.committed) {
+            return current + 1;
+        }
+    );
+
+
+if (
+    !tokenTransaction.committed
+) {
 
     throw new Error(
         "Unable to generate booking token"
     );
 }
 
+
+// =====================================================
+// FINAL TOKEN NUMBER
+// =====================================================
+
 const tokenNo =
-    Number(tokenTransaction.snapshot.val());
+    Number(
+        tokenTransaction.snapshot.val()
+    );
 
 
-    if (
-        !Number.isFinite(
-            tokenNo
-        ) ||
-        tokenNo <= 0
-    ) {
+if (
+    !Number.isFinite(
+        tokenNo
+    ) ||
+    tokenNo <= 0
+) {
 
-        throw new Error(
-            "Invalid booking token"
-        );
-    }
+    throw new Error(
+        "Invalid booking token"
+    );
+}
 
 
     // =====================================================
