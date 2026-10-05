@@ -567,10 +567,19 @@ const bookingTime =
     ).trim();  
 
 
-const paymentMode =  
-    String(  
-        storedIntent.paymentMode || "UPI"  
-    ).trim();  
+const paymentMode =
+    String(
+        storedIntent.paymentMode || "CASH"
+    ).trim().toUpperCase();
+
+if (
+    paymentMode !== "CASH" &&
+    paymentMode !== "UPI"
+) {
+    throw new Error(
+        "Invalid payment mode in payment intent"
+    );
+}  
 
 
 const bookingAmount =  
@@ -668,25 +677,59 @@ const storedRazorpayAmountPaise =
     );  
 
 
-if (  
-    storedRazorpayAmountPaise <= 0  
-) {  
-
-    throw new Error(  
-        "Invalid Razorpay amount in payment intent"  
-    );  
-}  
+const bookingAmountPaise =
+    rupeesToPaise(
+        bookingAmount
+    );
 
 
-if (  
-    amountPaise !==  
-    storedRazorpayAmountPaise  
-) {  
+const storedRazorpayAmountPaise =
+    Number(
+        storedIntent.razorpayAmountPaise || 0
+    );
 
-    throw new Error(  
-        "Payment amount mismatch"  
-    );  
-}  
+
+if (
+    !Number.isSafeInteger(
+        storedRazorpayAmountPaise
+    ) ||
+    storedRazorpayAmountPaise <= 0
+) {
+
+    throw new Error(
+        "Invalid Razorpay amount in payment intent"
+    );
+}
+
+
+// =====================================================
+// EXPECTED ONLINE PAYMENT
+// =====================================================
+// UPI  = Full booking amount
+// CASH = Only Barber Ji commission
+// =====================================================
+
+const expectedOnlineAmount =
+    paymentMode === "CASH"
+        ? commission
+        : bookingAmount;
+
+
+const expectedOnlineAmountPaise =
+    rupeesToPaise(
+        expectedOnlineAmount
+    );
+
+
+if (
+    expectedOnlineAmountPaise !==
+    storedRazorpayAmountPaise
+) {
+
+    throw new Error(
+        "Payment amount mismatch"
+    );
+}
 
 
 // =====================================================  
@@ -855,11 +898,15 @@ const booking = {
     commission:  
         commission,  
 
-    paidOnline:  
-        bookingAmount,  
+    paidOnline:
+    paymentMode === "CASH"
+        ? commission
+        : bookingAmount,
 
-    payAtSalon:  
-        0,  
+payAtSalon:
+    paymentMode === "CASH"
+        ? bookingAmount - commission
+        : 0,
 
     salonAmount:  
         salonAmount,  
