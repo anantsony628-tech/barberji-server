@@ -666,6 +666,36 @@ if (
 // PAYMENT AMOUNT SAFETY
 // =====================================================
 
+if (
+    !Number.isFinite(commission) ||
+    commission < 0 ||
+    commission > bookingAmount
+) {
+    throw new Error(
+        "Invalid commission amount"
+    );
+}
+
+if (
+    !Number.isFinite(salonAmount) ||
+    salonAmount < 0 ||
+    salonAmount > bookingAmount
+) {
+    throw new Error(
+        "Invalid salon amount"
+    );
+}
+
+const expectedOnlineAmount =
+    paymentMode === "CASH"
+        ? commission
+        : bookingAmount;
+
+const expectedOnlineAmountPaise =
+    rupeesToPaise(
+        expectedOnlineAmount
+    );
+
 const storedRazorpayAmountPaise =
     Number(
         storedIntent.razorpayAmountPaise || 0
@@ -677,37 +707,15 @@ if (
     ) ||
     storedRazorpayAmountPaise <= 0
 ) {
-
     throw new Error(
         "Invalid Razorpay amount in payment intent"
     );
 }
 
-
-// =====================================================
-// EXPECTED ONLINE PAYMENT
-// =====================================================
-// UPI  = Full booking amount
-// CASH = Only Barber Ji commission
-// =====================================================
-
-const expectedOnlineAmount =
-    paymentMode === "CASH"
-        ? commission
-        : bookingAmount;
-
-
-const expectedOnlineAmountPaise =
-    rupeesToPaise(
-        expectedOnlineAmount
-    );
-
-
 if (
     expectedOnlineAmountPaise !==
     storedRazorpayAmountPaise
 ) {
-
     throw new Error(
         "Payment amount mismatch"
     );
