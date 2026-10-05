@@ -706,8 +706,7 @@ const razorpayAmount =
         commissionSettings:
             commission.settings,
 
-        paymentMode:
-            "UPI",
+        paymentMode: normalizedPaymentMode,
 
         razorpayOrderId:
             razorpayOrder.orderId,
