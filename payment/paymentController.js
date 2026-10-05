@@ -197,6 +197,9 @@ async function createPaymentIntent(req, res) {
         const tokenNo =
             body.tokenNo;
 
+        const paymentMode =
+    body.paymentMode;
+
 
         // -------------------------------------------------
         // BASIC INPUT VALIDATION
@@ -328,7 +331,10 @@ async function createPaymentIntent(req, res) {
                         bookingTime,
 
                     tokenNo:
-                        tokenNo
+                        tokenNo,
+                    
+                    paymentMode:
+                    paymentMode
                 });
 
 
