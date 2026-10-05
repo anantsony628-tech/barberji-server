@@ -661,33 +661,15 @@ if (
 }  
 
 
-// =====================================================  
-// PAYMENT AMOUNT SAFETY  
-// =====================================================  
 
-const amountPaise =  
-    rupeesToPaise(  
-        bookingAmount  
-    );  
-
-
-const storedRazorpayAmountPaise =  
-    Number(  
-        storedIntent.razorpayAmountPaise || 0  
-    );  
-
-
-const bookingAmountPaise =
-    rupeesToPaise(
-        bookingAmount
-    );
-
+// =====================================================
+// PAYMENT AMOUNT SAFETY
+// =====================================================
 
 const storedRazorpayAmountPaise =
     Number(
         storedIntent.razorpayAmountPaise || 0
     );
-
 
 if (
     !Number.isSafeInteger(
