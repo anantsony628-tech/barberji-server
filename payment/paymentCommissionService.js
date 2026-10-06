@@ -1,97 +1,57 @@
 // =========================================================
 // BARBER JI - PAYMENT COMMISSION SERVICE
 // =========================================================
-// Responsibility:
-// - Firebase se admin commission settings read karna
-// - Backend par commission calculate karna
-// - Salon receivable calculate karna
+// ADMIN COMMISSION SETTINGS = AUTHORITATIVE SOURCE
 //
-// IMPORTANT:
-// - Android SharedPreferences par trust nahi karega
-// - Payment ke time backend calculation authoritative hogi
-// - Existing CommissionManager.java ko abhi touch nahi kiya gaya
+// Firebase:
+// BarberJi/Settings/Commission
+//
+// Supported:
+// - PERCENT
+// - FIXED
+// - NONE
+// - PER_BOOKING
+// - PER_SERVICE
+// - EXTRA FEE
+// - HYBRID
+// - FULL_ONLINE
 //
 // This file does NOT:
 // - create Razorpay order
 // - verify Razorpay payment
 // - process refund
 // - process payout
-// - update booking
+// - create/finalize booking
 // =========================================================
 
 const {
     getDatabase
 } = require("firebase-admin/database");
 
-
-// =========================================================
-// FIREBASE DATABASE
-// =========================================================
-
-const db =
-    getDatabase();
-
-
-// =========================================================
-// DEFAULT COMMISSION SETTINGS
-// =========================================================
-// Ye fallback hai.
-// Production mein admin setting Firebase mein available
-// honi chahiye.
-// =========================================================
+const db = getDatabase();
 
 const DEFAULT_SETTINGS = {
-
-    mode:
-        "PERCENT",
-
-    value:
-        10,
-
-    feeType:
-        "PER_BOOKING",
-
-    paymentMode:
-        "HYBRID",
-
-    extraFee:
-        0
-
+    mode: "PERCENT",
+    value: 10,
+    feeType: "PER_BOOKING",
+    paymentMode: "HYBRID",
+    extraFee: 0
 };
 
 
 // =========================================================
-// GET COMMISSION SETTINGS
-// =========================================================
-// Existing Android setting ka Firebase counterpart.
-// Expected path:
-//
-// BarberJi/Settings/Commission
-//
-// Example:
-//
-// {
-//   mode: "PERCENT",
-//   value: 10,
-//   fee_type: "PER_BOOKING",
-//   payment_mode: "HYBRID",
-//   extra_fee: 5
-// }
+// READ ADMIN COMMISSION SETTINGS
 // =========================================================
 
 async function getCommissionSettings() {
 
     const snapshot =
         await db
-            .ref(
-                "BarberJi/Settings/Commission"
-            )
+            .ref("BarberJi/Settings/Commission")
             .once("value");
 
 
-    if (
-        !snapshot.exists()
-    ) {
+    if (!snapshot.exists()) {
 
         return {
             ...DEFAULT_SETTINGS
@@ -103,10 +63,7 @@ async function getCommissionSettings() {
         snapshot.val();
 
 
-    if (
-        !data ||
-        typeof data !== "object"
-    ) {
+    if (!data || typeof data !== "object") {
 
         return {
             ...DEFAULT_SETTINGS
@@ -116,38 +73,28 @@ async function getCommissionSettings() {
 
     const mode =
         data.mode
-            ? String(
-                data.mode
-            ).toUpperCase()
+            ? String(data.mode).toUpperCase()
             : DEFAULT_SETTINGS.mode;
 
 
     const value =
-        Number(
-            data.value
-        );
+        Number(data.value);
 
 
     const feeType =
         data.fee_type
-            ? String(
-                data.fee_type
-            ).toUpperCase()
+            ? String(data.fee_type).toUpperCase()
             : DEFAULT_SETTINGS.feeType;
 
 
     const paymentMode =
         data.payment_mode
-            ? String(
-                data.payment_mode
-            ).toUpperCase()
+            ? String(data.payment_mode).toUpperCase()
             : DEFAULT_SETTINGS.paymentMode;
 
 
     const extraFee =
-        Number(
-            data.extra_fee
-        );
+        Number(data.extra_fee);
 
 
     return {
@@ -159,11 +106,13 @@ async function getCommissionSettings() {
                 ? mode
                 : DEFAULT_SETTINGS.mode,
 
+
         value:
             Number.isFinite(value) &&
             value >= 0
                 ? value
                 : DEFAULT_SETTINGS.value,
+
 
         feeType:
             feeType === "PER_SERVICE" ||
@@ -171,18 +120,19 @@ async function getCommissionSettings() {
                 ? feeType
                 : DEFAULT_SETTINGS.feeType,
 
+
         paymentMode:
             paymentMode === "FULL_ONLINE" ||
             paymentMode === "HYBRID"
                 ? paymentMode
                 : DEFAULT_SETTINGS.paymentMode,
 
+
         extraFee:
             Number.isFinite(extraFee) &&
             extraFee >= 0
                 ? extraFee
                 : DEFAULT_SETTINGS.extraFee
-
     };
 }
 
@@ -193,13 +143,12 @@ async function getCommissionSettings() {
 
 function calculateCommission(
     bookingAmount,
-    settings
+    settings,
+    serviceCount = 1
 ) {
 
     const amount =
-        Number(
-            bookingAmount
-        );
+        Number(bookingAmount);
 
 
     if (
@@ -230,9 +179,24 @@ function calculateCommission(
         ).toUpperCase();
 
 
+    const feeType =
+        String(
+            settings.feeType || "PER_BOOKING"
+        ).toUpperCase();
+
+
     const value =
-        Number(
-            settings.value
+        Number(settings.value);
+
+
+    const extraFee =
+        Number(settings.extraFee);
+
+
+    const count =
+        Math.max(
+            1,
+            Number(serviceCount) || 1
         );
 
 
@@ -240,34 +204,48 @@ function calculateCommission(
 
 
     // =====================================================
-    // NONE
+    // NO COMMISSION
     // =====================================================
 
-    if (
-        mode === "NONE"
-    ) {
+    if (mode === "NONE") {
 
         commission = 0;
 
     }
 
+
     // =====================================================
-    // FIXED
+    // FIXED COMMISSION
     // =====================================================
 
-    else if (
-        mode === "FIXED"
-    ) {
+    else if (mode === "FIXED") {
 
-        commission =
-            Number.isFinite(value)
-                ? value
-                : 0;
+        if (
+            !Number.isFinite(value) ||
+            value < 0
+        ) {
 
+            throw new Error(
+                "Invalid fixed commission"
+            );
+        }
+
+
+        if (feeType === "PER_SERVICE") {
+
+            commission =
+                value * count;
+
+        } else {
+
+            commission =
+                value;
+        }
     }
 
+
     // =====================================================
-    // PERCENT
+    // PERCENTAGE COMMISSION
     // =====================================================
 
     else {
@@ -289,12 +267,15 @@ function calculateCommission(
         }
 
 
+        // Percentage on total booking amount.
+        // Per Booking / Per Service gives same percentage
+        // mathematically when all selected services are included
+        // in bookingAmount.
         commission =
             (
                 amount *
                 percentage
             ) / 100;
-
     }
 
 
@@ -302,24 +283,26 @@ function calculateCommission(
     // EXTRA FEE
     // =====================================================
 
-    const extraFee =
-        Number(
-            settings.extraFee
-        );
-
-
     if (
         Number.isFinite(extraFee) &&
         extraFee > 0
     ) {
 
-        commission +=
-            extraFee;
+        if (feeType === "PER_SERVICE") {
+
+            commission +=
+                extraFee * count;
+
+        } else {
+
+            commission +=
+                extraFee;
+        }
     }
 
 
     // =====================================================
-    // ROUND TO 2 DECIMAL PLACES
+    // ROUND
     // =====================================================
 
     commission =
@@ -329,7 +312,7 @@ function calculateCommission(
 
 
     // =====================================================
-    // COMMISSION CANNOT EXCEED BOOKING AMOUNT
+    // NEVER CHARGE MORE THAN BOOKING AMOUNT
     // =====================================================
 
     if (
@@ -340,10 +323,6 @@ function calculateCommission(
             amount;
     }
 
-
-    // =====================================================
-    // SALON RECEIVABLE
-    // =====================================================
 
     const salonAmount =
         Math.round(
@@ -363,18 +342,29 @@ function calculateCommission(
             commission,
 
         salonAmount:
-            salonAmount
+            salonAmount,
 
+        feeType:
+            feeType,
+
+        serviceCount:
+            count,
+
+        extraFee:
+            Number.isFinite(extraFee)
+                ? extraFee
+                : 0
     };
 }
 
 
 // =========================================================
-// CALCULATE COMMISSION FOR BOOKING
+// BOOKING COMMISSION
 // =========================================================
 
 async function calculateBookingCommission(
-    bookingAmount
+    bookingAmount,
+    serviceCount = 1
 ) {
 
     const settings =
@@ -384,7 +374,8 @@ async function calculateBookingCommission(
     const calculation =
         calculateCommission(
             bookingAmount,
-            settings
+            settings,
+            serviceCount
         );
 
 
@@ -408,15 +399,13 @@ async function calculateBookingCommission(
 
             extraFee:
                 settings.extraFee
-
         }
-
     };
 }
 
 
 // =========================================================
-// EXPORT
+// EXPORTS
 // =========================================================
 
 module.exports = {
@@ -426,5 +415,4 @@ module.exports = {
     calculateCommission,
 
     calculateBookingCommission
-
 };
