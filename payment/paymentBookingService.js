@@ -599,6 +599,50 @@ const salonAmount =
         storedIntent.salonAmount || 0  
     );  
 
+    const commissionAmount =
+    Number(
+        storedIntent.commissionAmount || 0
+    );
+
+const extraFee =
+    Number(
+        storedIntent.extraFee || 0
+    );
+
+const salonCommissionTotal =
+    Number(
+        storedIntent.salonCommissionTotal ||
+        commission
+    );
+
+if (
+    !Number.isFinite(commissionAmount) ||
+    commissionAmount < 0
+) {
+    throw new Error(
+        "Invalid commission base amount"
+    );
+}
+
+if (
+    !Number.isFinite(extraFee) ||
+    extraFee < 0
+) {
+    throw new Error(
+        "Invalid extra fee"
+    );
+}
+
+if (
+    !Number.isFinite(salonCommissionTotal) ||
+    salonCommissionTotal < 0 ||
+    salonCommissionTotal > bookingAmount
+) {
+    throw new Error(
+        "Invalid total salon commission"
+    );
+}
+
 
 if (!customerId) {  
 
@@ -982,21 +1026,30 @@ const booking = {
     bookingAmount:  
         bookingAmount,  
 
-    commission:  
-        commission,  
+    commission:
+    commission,
 
-    paidOnline:
+commissionAmount:
+    commissionAmount,
+
+extraFee:
+    extraFee,
+
+salonCommissionTotal:
+    salonCommissionTotal,
+
+paidOnline:
     paymentMode === "CASH"
-        ? commission
+        ? salonCommissionTotal
         : bookingAmount,
 
 payAtSalon:
     paymentMode === "CASH"
-        ? bookingAmount - commission
+        ? bookingAmount - salonCommissionTotal
         : 0,
 
-    salonAmount:  
-        salonAmount,  
+salonAmount:
+    salonAmount,
 
     status:  
         "BOOKED"  
