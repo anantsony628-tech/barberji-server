@@ -1050,5 +1050,6 @@ module.exports = {
 
     createPaymentIntent,
 
-    verifyPayment
+    verifyPayment,
+    confirmZeroCashBooking
 };
