@@ -655,36 +655,196 @@ async function createPaymentIntent({
     }
 
 
-    // =====================================================
-    // ZERO ONLINE PAYMENT
-    // =====================================================
-    //
-    // Agar CASH + salon-side total deduction = ₹0,
-    // Razorpay ₹0 order create nahi kar sakta.
-    //
-    // Is special case ko next payment-flow step mein
-    // properly handle kiya jayega.
-    //
-    // Abhi invalid Razorpay order banane se rok rahe hain.
-    // =====================================================
-
-    if (
-        normalizedPaymentMode === "CASH" &&
-        razorpayAmountRounded <= 0
-    ) {
-
-        throw new Error(
-            "No online salon charge is required for this cash booking"
-        );
-    }
-
-
+    
     // =====================================================
     // CREATE UNIQUE PAYMENT INTENT
     // =====================================================
 
     const paymentIntentId =
         createPaymentIntentId();
+
+    // =====================================================
+// ZERO CASH PAYMENT - NO RAZORPAY REQUIRED
+// =====================================================
+//
+// CASH + ₹0 salon-side deduction
+// → Razorpay order create nahi hoga.
+// → PaymentIntent directly NO_PAYMENT_REQUIRED hoga.
+// → Final booking zeroCashBookingService karega.
+// =====================================================
+
+if (
+    normalizedPaymentMode === "CASH" &&
+    razorpayAmountRounded === 0
+) {
+
+    const paymentIntent = {
+
+        paymentIntentId:
+            paymentIntentId,
+
+        authUid:
+            cleanAuthUid,
+
+        customerId:
+            cleanCustomerId,
+
+        customerName:
+            cleanCustomerName,
+
+        customerMobile:
+            cleanCustomerMobile,
+
+        salonId:
+            verified.salonId,
+
+        partnerId:
+            verified.partnerId,
+
+        salonName:
+            verified.salonName,
+
+        ownerMobile:
+            cleanOwnerMobile,
+
+        services:
+            verified.services,
+
+        serviceIds:
+            verified.services.map(
+                service =>
+                    service.serviceId
+            ),
+
+        serviceCount:
+            verified.serviceCount,
+
+        bookingDate:
+            cleanBookingDate,
+
+        bookingTime:
+            cleanBookingTime,
+
+        tokenNo:
+            cleanTokenNo,
+
+        // =============================================
+        // AUTHORITATIVE FINANCIAL VALUES
+        // =============================================
+
+        bookingAmount:
+            commission.bookingAmount,
+
+        commission:
+            commission.totalSalonDeduction,
+
+        commissionAmount:
+            commission.commissionAmount,
+
+        extraFee:
+            commission.extraFee,
+
+        salonCommissionTotal:
+            commission.totalSalonDeduction,
+
+        salonAmount:
+            commission.salonAmount,
+
+        commissionSettings:
+            commission.settings,
+
+        // =============================================
+        // PAYMENT
+        // =============================================
+
+        paymentMode:
+            "CASH",
+
+        razorpayOrderId:
+            "",
+
+        razorpayAmountPaise:
+            0,
+
+        currency:
+            "INR",
+
+        razorpayOrderStatus:
+            "",
+
+        status:
+            "NO_PAYMENT_REQUIRED",
+
+        createdAt:
+            Date.now()
+    };
+
+
+    await db
+        .ref("BarberJi")
+        .child("PaymentIntents")
+        .child(paymentIntentId)
+        .set(
+            paymentIntent
+        );
+
+
+    return {
+
+        success:
+            true,
+
+        requiresPayment:
+            false,
+
+        paymentIntentId:
+            paymentIntentId,
+
+        razorpayOrderId:
+            "",
+
+        razorpayKeyId:
+            require("./paymentConfig")
+                .razorpay
+                .keyId,
+
+        amountPaise:
+            0,
+
+        amount:
+            0,
+
+        currency:
+            "INR",
+
+        bookingAmount:
+            commission.bookingAmount,
+
+        commission:
+            0,
+
+        commissionAmount:
+            commission.commissionAmount,
+
+        extraFee:
+            commission.extraFee,
+
+        salonCommissionTotal:
+            0,
+
+        salonAmount:
+            commission.bookingAmount,
+
+        serviceCount:
+            verified.serviceCount,
+
+        paymentMode:
+            "CASH",
+
+        services:
+            verified.services
+    };
+        }
 
 
     const receipt =
