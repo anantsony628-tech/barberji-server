@@ -897,31 +897,35 @@ async function createPaymentIntent({
 
 
         // =================================================
-        // FINANCIAL BREAKDOWN
-        // =================================================
+// FINANCIAL BREAKDOWN
+// =================================================
 
-        bookingAmount:
-            commission.bookingAmount,
+bookingAmount:
+    commission.bookingAmount,
 
-        commission:
-            commission.totalSalonDeduction,
+commission:
+    commission.totalSalonDeduction,
 
-        commissionAmount:
-            commission.commissionAmount,
+commissionAmount:
+    commission.commissionAmount,
 
-        extraFee:
-            commission.extraFee,
+extraFee:
+    commission.extraFee,
 
-        salonCommissionTotal:
-            commission.totalSalonDeduction,
+salonCommissionTotal:
+    commission.totalSalonDeduction,
 
-        salonAmount:
-            commission.salonAmount,
+salonAmount:
+    commission.salonAmount,
 
-        serviceCount:
-            verified.serviceCount,
+serviceCount:
+    verified.serviceCount,
+
+paymentMode:
+    normalizedPaymentMode,
+
 services:
-            verified.services
+    verified.services
 
     };
 }
