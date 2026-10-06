@@ -630,6 +630,49 @@ console.log(
                     "Invalid payment signature"
             });
         }
+        // -------------------------------------------------
+        // VERIFY ACTUAL RAZORPAY PAYMENT DETAILS
+        // -------------------------------------------------
+        // Signature valid hone ke baad Razorpay se actual
+        // payment details fetch ki jayengi.
+        //
+        // Checks:
+        // - Same Order ID
+        // - Same payment amount
+        // - INR currency
+        // - Payment captured
+        // -------------------------------------------------
+
+        const paymentDetails =
+            await paymentService
+                .verifyPaymentDetails({
+
+                    paymentId:
+                        razorpayPaymentId,
+
+                    expectedOrderId:
+                        storedRazorpayOrderId,
+
+                    expectedAmountPaise:
+                        storedAmountPaise
+                });
+
+
+        if (
+            !paymentDetails ||
+            !paymentDetails.verified
+        ) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                verified: false,
+
+                message:
+                    "Razorpay payment details could not be verified"
+            });
+        }
 
 
         // -------------------------------------------------
