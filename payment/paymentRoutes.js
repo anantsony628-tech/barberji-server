@@ -46,6 +46,18 @@ router.post(
     paymentAuth.verifyFirebaseUser,
     paymentController.verifyPayment
 );
+// =========================================================
+// CONFIRM ZERO CASH BOOKING
+// =========================================================
+// CASH + ₹0 salon-side deduction
+// Razorpay payment required nahi hai.
+// =========================================================
+
+router.post(
+    "/confirm-zero-cash-booking",
+    paymentAuth.verifyFirebaseUser,
+    paymentController.confirmZeroCashBooking
+);
 
 
 // =========================================================
