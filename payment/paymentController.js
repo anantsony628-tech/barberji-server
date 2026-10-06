@@ -22,6 +22,9 @@ const paymentIntentService =
 const paymentBookingService =
     require("./paymentBookingService");
 
+const zeroCashBookingService =
+    require("./zeroCashBookingService");
+
 
 // =========================================================
 // OLD CREATE ORDER
@@ -759,6 +762,279 @@ console.log(
             message:
                 error.message ||
                 "Payment verification failed"
+        });
+    }
+}
+// =========================================================
+// CONFIRM ZERO CASH BOOKING
+// =========================================================
+// CASH + ₹0 salon-side deduction
+//
+// Is flow mein:
+// - Razorpay nahi chalega
+// - Payment verification nahi hogi
+// - Sirf NO_PAYMENT_REQUIRED PaymentIntent allowed hai
+// - Final booking zeroCashBookingService karega
+// =========================================================
+
+async function confirmZeroCashBooking(req, res) {
+
+    try {
+
+        // -------------------------------------------------
+        // AUTHENTICATED USER
+        // -------------------------------------------------
+
+        const user =
+            req.user || {};
+
+
+        const authUid =
+            user.uid
+                ? String(user.uid)
+                : "";
+
+
+        if (!authUid) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                verified: false,
+
+                message:
+                    "Customer authentication required"
+            });
+        }
+
+
+        // -------------------------------------------------
+        // REQUEST DATA
+        // -------------------------------------------------
+
+        const {
+            paymentIntentId
+        } = req.body || {};
+
+
+        if (!paymentIntentId ||
+            String(paymentIntentId).trim() === "") {
+
+            return res.status(400).json({
+
+                success: false,
+
+                verified: false,
+
+                message:
+                    "Payment intent ID is required"
+            });
+        }
+
+
+        // -------------------------------------------------
+        // LOAD STORED PAYMENT INTENT
+        // -------------------------------------------------
+
+        const paymentIntent =
+            await paymentIntentService
+                .getPaymentIntent(
+                    paymentIntentId
+                );
+
+
+        if (!paymentIntent) {
+
+            return res.status(404).json({
+
+                success: false,
+
+                verified: false,
+
+                message:
+                    "Payment intent not found"
+            });
+        }
+
+
+        // -------------------------------------------------
+        // PAYMENT INTENT OWNER CHECK
+        // -------------------------------------------------
+
+        const intentAuthUid =
+            paymentIntent.authUid
+                ? String(paymentIntent.authUid)
+                : "";
+
+
+        if (!intentAuthUid ||
+            intentAuthUid !== authUid) {
+
+            return res.status(403).json({
+
+                success: false,
+
+                verified: false,
+
+                message:
+                    "Payment intent does not belong to this customer"
+            });
+        }
+
+
+        // -------------------------------------------------
+        // STATUS CHECK
+        // -------------------------------------------------
+        // Zero-payment booking sirf
+        // NO_PAYMENT_REQUIRED state se ho sakti hai.
+        // -------------------------------------------------
+
+        if (
+            String(paymentIntent.status || "") !==
+            "NO_PAYMENT_REQUIRED"
+        ) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                verified: false,
+
+                message:
+                    "Payment intent is not eligible for zero-payment booking"
+            });
+        }
+
+
+        // -------------------------------------------------
+        // PAYMENT MODE CHECK
+        // -------------------------------------------------
+
+        if (
+            String(paymentIntent.paymentMode || "")
+                .toUpperCase() !== "CASH"
+        ) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                verified: false,
+
+                message:
+                    "Zero-payment booking is allowed only for cash"
+            });
+        }
+
+
+        // -------------------------------------------------
+        // RAZORPAY AMOUNT CHECK
+        // -------------------------------------------------
+        // Security:
+        // Zero flow mein Razorpay amount exactly 0 hona chahiye.
+        // -------------------------------------------------
+
+        const razorpayAmountPaise =
+            Number(
+                paymentIntent.razorpayAmountPaise
+            );
+
+
+        if (
+            !Number.isSafeInteger(
+                razorpayAmountPaise
+            ) ||
+            razorpayAmountPaise !== 0
+        ) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                verified: false,
+
+                message:
+                    "Payment intent is not a zero-payment intent"
+            });
+        }
+
+
+        // -------------------------------------------------
+        // FINALIZE ZERO CASH BOOKING
+        // -------------------------------------------------
+
+        const result =
+            await zeroCashBookingService
+                .finalizeZeroCashBooking({
+
+                    paymentIntent:
+                        paymentIntent
+                });
+
+
+        // -------------------------------------------------
+        // FINAL RESPONSE
+        // -------------------------------------------------
+
+        return res.status(200).json({
+
+            success:
+                result.success,
+
+            verified:
+                true,
+
+            duplicate:
+                result.duplicate || false,
+
+            message:
+                result.duplicate
+                    ? "Cash booking already exists"
+                    : "Cash booking created successfully",
+
+            paymentIntentId:
+                result.paymentIntentId,
+
+            bookingId:
+                result.bookingId,
+
+            paymentId:
+                result.paymentId || "",
+
+            tokenNo:
+                result.tokenNo,
+
+            otp:
+                result.otp,
+
+            bookingAmount:
+                result.bookingAmount,
+
+            commission:
+                result.commission,
+
+            salonAmount:
+                result.salonAmount
+        });
+
+    } catch (error) {
+
+        console.error(
+            "Zero cash booking confirmation error:",
+            error
+        );
+
+
+        return res.status(500).json({
+
+            success: false,
+
+            verified: false,
+
+            message:
+                error.message ||
+                "Unable to create zero cash booking"
         });
     }
 }
