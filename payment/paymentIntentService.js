@@ -844,10 +844,7 @@ async function createPaymentIntent({
             "CREATED",
 
         createdAt:
-            admin
-                .database
-                .ServerValue
-                .TIMESTAMP
+    Date.now()
 
     };
 
