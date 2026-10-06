@@ -5,13 +5,16 @@
 // - Pre-payment booking/payment intent banana
 // - Firebase Services se actual service verify karna
 // - Actual service prices backend par calculate karna
-// - Admin commission calculate karna
+// - Admin SALON-SIDE commission calculate karna
+// - Per Booking / Per Service extra fee calculate karna
 // - PaymentIntent Firebase mein save karna
 // - Razorpay Order create karna
 //
 // IMPORTANT:
 // - Client ke amount par trust nahi kiya jayega
 // - Service price Firebase se li jayegi
+// - Salon-side commission backend par authoritative hai
+// - Customer-side commission abhi is file mein nahi hai
 // - Final Booking abhi create nahi hogi
 // - Payment verify hone ke baad final booking banegi
 //
@@ -189,17 +192,16 @@ async function getVerifiedServices({
     //
     // Services
     //   └── SALON00008
-    //       ├── -P1PvRbvYG6FRtO6TEXR
-    //       └── -P2JfTi37s-XgROLcaQA
+    //       ├── serviceId
+    //       └── serviceId
     //
     // OLD STRUCTURE ALSO SUPPORTED:
     //
     // Services
     //   └── SALON00008
-    //       └── sonu hair cut
+    //       └── salonName
     //           └── serviceId
     // =====================================================
-
 
     const salonServicesRef =
         db
@@ -222,9 +224,7 @@ async function getVerifiedServices({
     ) {
 
         // -------------------------------------------------
-        // FIRST: CURRENT STRUCTURE
-        //
-        // Services/{salonId}/{serviceId}
+        // CURRENT STRUCTURE
         // -------------------------------------------------
 
         let serviceSnapshot =
@@ -234,9 +234,7 @@ async function getVerifiedServices({
 
 
         // -------------------------------------------------
-        // SECOND: OLD STRUCTURE
-        //
-        // Services/{salonId}/{salonName}/{serviceId}
+        // OLD STRUCTURE
         // -------------------------------------------------
 
         if (!serviceSnapshot.exists()) {
@@ -343,7 +341,7 @@ async function getVerifiedServices({
 
 
         // -------------------------------------------------
-        // TOTAL AMOUNT
+        // TOTAL SERVICE AMOUNT
         // -------------------------------------------------
 
         totalAmount +=
@@ -411,6 +409,9 @@ async function getVerifiedServices({
         services:
             verifiedServices,
 
+        serviceCount:
+            verifiedServices.length,
+
         totalAmount:
             totalAmount
 
@@ -423,19 +424,19 @@ async function getVerifiedServices({
 // =========================================================
 
 async function createPaymentIntent({
-  authUid,
-  customerId,
-  customerName,
-  customerMobile,
-  salonId,
-  partnerId,
-  salonName,
-  ownerMobile,
-  serviceIds,
-  bookingDate,
-  bookingTime,
-  tokenNo,
-  paymentMode
+    authUid,
+    customerId,
+    customerName,
+    customerMobile,
+    salonId,
+    partnerId,
+    salonName,
+    ownerMobile,
+    serviceIds,
+    bookingDate,
+    bookingTime,
+    tokenNo,
+    paymentMode
 }) {
 
     const cleanAuthUid =
@@ -541,7 +542,6 @@ async function createPaymentIntent({
 
     // =====================================================
     // VERIFY SERVICES
-    // + CALCULATE ACTUAL AMOUNT
     // =====================================================
 
     const verified =
@@ -563,29 +563,120 @@ async function createPaymentIntent({
 
 
     // =====================================================
-    // BACKEND COMMISSION
+    // BACKEND SALON-SIDE COMMISSION
+    // =====================================================
+    //
+    // serviceCount is now passed.
+    //
+    // Example:
+    //
+    // Service = ₹100
+    // Commission = 10%
+    // Extra Fee = ₹5 PER_SERVICE
+    // 1 service
+    //
+    // commissionAmount = ₹10
+    // extraFee = ₹5
+    // totalSalonDeduction = ₹15
+    // salonAmount = ₹85
+    //
+    // No customer-side charge here.
     // =====================================================
 
     const commission =
         await paymentCommissionService
             .calculateBookingCommission(
-                verified.totalAmount
+                verified.totalAmount,
+                verified.serviceCount
             );
 
+
+    // =====================================================
+    // NORMALIZE CUSTOMER PAYMENT MODE
+    // =====================================================
+
     const normalizedPaymentMode =
-  String(paymentMode || "Cash").trim().toUpperCase();
+        String(
+            paymentMode || "Cash"
+        )
+            .trim()
+            .toUpperCase();
 
-if (
-  normalizedPaymentMode !== "CASH" &&
-  normalizedPaymentMode !== "UPI"
-) {
-  throw new Error("Invalid payment mode");
-}
 
-const razorpayAmount =
-  normalizedPaymentMode === "CASH"
-    ? commission.commission
-    : verified.totalAmount;
+    if (
+        normalizedPaymentMode !== "CASH" &&
+        normalizedPaymentMode !== "UPI"
+    ) {
+
+        throw new Error(
+            "Invalid payment mode"
+        );
+    }
+
+
+    // =====================================================
+    // RAZORPAY AMOUNT
+    // =====================================================
+    //
+    // CASH:
+    // Customer salon par service amount dega.
+    // Barber Ji ka salon-side deduction booking ke
+    // time online collect hoga.
+    //
+    // UPI:
+    // Full service amount online collect hoga.
+    // Salon payout later settlement se hoga.
+    //
+    // Customer-side commission abhi nahi hai.
+    // =====================================================
+
+    const razorpayAmount =
+        normalizedPaymentMode === "CASH"
+            ? commission.totalSalonDeduction
+            : verified.totalAmount;
+
+
+    const razorpayAmountRounded =
+        Math.round(
+            Number(razorpayAmount) * 100
+        ) / 100;
+
+
+    if (
+        !Number.isFinite(
+            razorpayAmountRounded
+        ) ||
+        razorpayAmountRounded < 0
+    ) {
+
+        throw new Error(
+            "Invalid payment amount"
+        );
+    }
+
+
+    // =====================================================
+    // ZERO ONLINE PAYMENT
+    // =====================================================
+    //
+    // Agar CASH + salon-side total deduction = ₹0,
+    // Razorpay ₹0 order create nahi kar sakta.
+    //
+    // Is special case ko next payment-flow step mein
+    // properly handle kiya jayega.
+    //
+    // Abhi invalid Razorpay order banane se rok rahe hain.
+    // =====================================================
+
+    if (
+        normalizedPaymentMode === "CASH" &&
+        razorpayAmountRounded <= 0
+    ) {
+
+        throw new Error(
+            "No online salon charge is required for this cash booking"
+        );
+    }
 
 
     // =====================================================
@@ -618,7 +709,7 @@ const razorpayAmount =
             amountPaise:
                 paymentBookingService
                     .rupeesToPaise(
-                        razorpayAmount
+                        razorpayAmountRounded
                     ),
 
             receipt:
@@ -685,6 +776,9 @@ const razorpayAmount =
                     service.serviceId
             ),
 
+        serviceCount:
+            verified.serviceCount,
+
         bookingDate:
             cleanBookingDate,
 
@@ -694,19 +788,45 @@ const razorpayAmount =
         tokenNo:
             cleanTokenNo,
 
+
+        // =================================================
+        // AUTHORITATIVE FINANCIAL VALUES
+        // =================================================
+
         bookingAmount:
             commission.bookingAmount,
 
+        // Existing compatibility field:
+        // total salon-side deduction.
         commission:
-            commission.commission,
+            commission.totalSalonDeduction,
 
+        // Separate salon-side base commission.
+        commissionAmount:
+            commission.commissionAmount,
+
+        // Separate salon-side extra fee.
+        extraFee:
+            commission.extraFee,
+
+        // Explicit total salon deduction.
+        salonCommissionTotal:
+            commission.totalSalonDeduction,
+
+        // Salon amount after salon-side deduction.
         salonAmount:
             commission.salonAmount,
 
         commissionSettings:
             commission.settings,
 
-        paymentMode: normalizedPaymentMode,
+
+        // =================================================
+        // PAYMENT
+        // =================================================
+
+        paymentMode:
+            normalizedPaymentMode,
 
         razorpayOrderId:
             razorpayOrder.orderId,
@@ -724,9 +844,10 @@ const razorpayAmount =
             "CREATED",
 
         createdAt:
-            require(
-                "firebase-admin/database"
-            ).ServerValue.TIMESTAMP
+            admin
+                .database
+                .ServerValue
+                .TIMESTAMP
 
     };
 
@@ -767,22 +888,39 @@ const razorpayAmount =
         amountPaise:
             razorpayOrder.amountPaise,
 
+        // Actual service amount.
         amount:
             commission.bookingAmount,
 
         currency:
             razorpayOrder.currency,
 
+
+        // =================================================
+        // FINANCIAL BREAKDOWN
+        // =================================================
+
         bookingAmount:
             commission.bookingAmount,
 
         commission:
-            commission.commission,
+            commission.totalSalonDeduction,
+
+        commissionAmount:
+            commission.commissionAmount,
+
+        extraFee:
+            commission.extraFee,
+
+        salonCommissionTotal:
+            commission.totalSalonDeduction,
 
         salonAmount:
             commission.salonAmount,
 
-        services:
+        serviceCount:
+            verified.serviceCount,
+services:
             verified.services
 
     };
@@ -866,3 +1004,4 @@ module.exports = {
     getVerifiedServices
 
 };
+        
