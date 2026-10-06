@@ -262,6 +262,209 @@ function verifyPaymentSignature({
         )
     );
 }
+// =========================================================
+// VERIFY RAZORPAY PAYMENT DETAILS
+// =========================================================
+// Signature verify hone ke baad Razorpay se actual payment
+// details fetch karke verify ki jayengi.
+//
+// Checks:
+// - Payment Razorpay par exist karta hai
+// - Same Razorpay Order ID ka hai
+// - Actual amount stored PaymentIntent amount ke barabar hai
+// - Currency INR hai
+// - Payment captured/successfully paid hai
+//
+// IMPORTANT:
+// - Booking yahan create nahi hoti
+// - Commission yahan calculate nahi hota
+// - Refund/payout yahan nahi hota
+// =========================================================
+
+async function verifyPaymentDetails({
+    paymentId,
+    expectedOrderId,
+    expectedAmountPaise
+}) {
+
+    if (
+        !paymentId ||
+        !expectedOrderId ||
+        !Number.isSafeInteger(
+            Number(expectedAmountPaise)
+        ) ||
+        Number(expectedAmountPaise) <= 0
+    ) {
+
+        throw new Error(
+            "Invalid payment verification data"
+        );
+    }
+
+
+    const basicAuth =
+        getBasicAuth();
+
+
+    const response =
+        await fetch(
+            `${RAZORPAY_BASE_URL}/payments/${encodeURIComponent(
+                String(paymentId)
+            )}`,
+            {
+                method:
+                    "GET",
+
+                headers: {
+
+                    "Authorization":
+                        `Basic ${basicAuth}`
+
+                }
+            }
+        );
+
+
+    const responseData =
+        await response.json();
+
+
+    if (!response.ok) {
+
+        console.error(
+            "Razorpay payment fetch failed:",
+            responseData
+        );
+
+
+        const razorpayMessage =
+            responseData &&
+            responseData.error &&
+            responseData.error.description
+                ? responseData.error.description
+                : "Unable to verify Razorpay payment";
+
+
+        throw new Error(
+            razorpayMessage
+        );
+    }
+
+
+    const actualOrderId =
+        responseData &&
+        responseData.order_id
+            ? String(
+                responseData.order_id
+            )
+            : "";
+
+
+    if (
+        !actualOrderId ||
+        actualOrderId !==
+            String(expectedOrderId)
+    ) {
+
+        throw new Error(
+            "Razorpay payment order does not match"
+        );
+    }
+
+
+    const actualAmountPaise =
+        Number(
+            responseData.amount
+        );
+
+
+    if (
+        !Number.isSafeInteger(
+            actualAmountPaise
+        ) ||
+        actualAmountPaise <= 0
+    ) {
+
+        throw new Error(
+            "Invalid Razorpay payment amount"
+        );
+    }
+
+
+    if (
+        actualAmountPaise !==
+            Number(expectedAmountPaise)
+    ) {
+
+        throw new Error(
+            "Razorpay payment amount mismatch"
+        );
+    }
+
+
+    const currency =
+        responseData &&
+        responseData.currency
+            ? String(
+                responseData.currency
+            ).toUpperCase()
+            : "";
+
+
+    if (
+        currency !== "INR"
+    ) {
+
+        throw new Error(
+            "Invalid Razorpay payment currency"
+        );
+    }
+
+
+    const paymentStatus =
+        responseData &&
+        responseData.status
+            ? String(
+                responseData.status
+            ).toLowerCase()
+            : "";
+
+
+    if (
+        paymentStatus !== "captured"
+    ) {
+
+        throw new Error(
+            "Razorpay payment is not captured"
+        );
+    }
+
+
+    return {
+
+        success:
+            true,
+
+        verified:
+            true,
+
+        paymentId:
+            String(paymentId),
+
+        orderId:
+            actualOrderId,
+
+        amountPaise:
+            actualAmountPaise,
+
+        currency:
+            currency,
+
+        status:
+            paymentStatus
+
+    };
+}
 
 
 // =========================================================
@@ -272,6 +475,8 @@ module.exports = {
 
     createOrder,
 
-    verifyPaymentSignature
+    verifyPaymentSignature,
+
+    verifyPaymentDetails
 
 };
