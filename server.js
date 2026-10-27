@@ -31,6 +31,9 @@ const settlementRoutes =
 const advertisementPaymentRoutes =
     require("./advertisement/payment/advertisementPaymentRoutes");
 
+const staffRoutes =
+    require("./staff/staffRoutes");
+
 // ==========================================
 // EXPRESS SERVER
 // ==========================================
@@ -57,6 +60,11 @@ app.use(
 app.use(
     "/advertisement/payment",
     advertisementPaymentRoutes
+);
+
+app.use(
+    "/api/staff",
+    staffRoutes
 );
 
 // =========================================================
