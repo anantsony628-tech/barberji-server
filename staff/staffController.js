@@ -3,7 +3,7 @@ const jwt = require("jsonwebtoken");
 const { getDatabase } = require("firebase-admin/database");
 const db = getDatabase();
 
-// ===== REGISTER - Same tumhara wala =====
+// ===== REGISTER =====
 exports.register = async (req, res) => {
   try {
     const { 
@@ -16,20 +16,30 @@ exports.register = async (req, res) => {
     if(!aadhaarNumber || aadhaarNumber.length != 12) return res.status(400).json({ msg: "12 digit Aadhaar chahiye" });
     if(!aadhaarFrontUrl || !aadhaarBackUrl) return res.status(400).json({ msg: "Aadhaar Front + Back Photo Compulsory hai" });
     if(!profilePhotoUrl) return res.status(400).json({ msg: "Profile Photo Compulsory hai" });
+    if(!mobile) return res.status(400).json({ msg: "Mobile number chahiye" });
+    if(!pin) return res.status(400).json({ msg: "PIN chahiye" });
 
     const snap = await db.ref("StaffPool").orderByChild("aadhaarNumber").equalTo(aadhaarNumber).once("value");
     if(snap.exists()) return res.status(400).json({ msg: "Is Aadhaar se Staff pehle se hai" });
 
-    const hash = await bcrypt.hash(pin, 10);
+    const hash = await bcrypt.hash(pin.toString(), 10);
     const permanentId = "STAFF_" + Date.now();
 
     const data = {
       permanentId,
       staffId: "",
-      aadhaarNumber, name, mobile, whatsappNumber, email,
-      bankAccountNumber, ifscCode, accountHolderName,
+      aadhaarNumber, 
+      name, 
+      mobile: mobile.toString().trim(), 
+      whatsappNumber: whatsappNumber || mobile,
+      email: email || "",
+      bankAccountNumber, 
+      ifscCode, 
+      accountHolderName,
       staffPinHash: hash,
-      profilePhotoUrl, skills, address,
+      profilePhotoUrl, 
+      skills: skills || "", 
+      address: address || "",
       aadhaarFrontUrl: aadhaarFrontUrl || "",
       aadhaarBackUrl: aadhaarBackUrl || "",
       panNumber: panNumber || "",
@@ -42,39 +52,74 @@ exports.register = async (req, res) => {
     await db.ref("StaffPool").child(permanentId).set(data);
     res.json({ msg: "Applied Success", permanentId, status: "PENDING" });
 
-  } catch(err){ res.status(500).json({ msg: err.message }); }
+  } catch(err){ 
+    console.error(err);
+    res.status(500).json({ msg: err.message }); 
+  }
 };
 
-// ===== LOGIN - Same =====
+// ===== LOGIN - FIXED FOR BOTH MOBILE + STAFF ID =====
 exports.login = async (req, res) => {
   try {
-    const { staffId, pin } = req.body;
-    const snap = await db.ref("StaffPool").orderByChild("staffId").equalTo(staffId).once("value");
-    if(!snap.exists()) return res.status(404).json({ msg: "Staff ID nahi mila" });
+    const { staffId, mobile, pin } = req.body;
+    
+    if(!pin) return res.status(400).json({ msg: "PIN dalo" });
+
+    let queryField = "";
+    let queryValue = "";
+
+    if (staffId && staffId.toString().trim() !== "") {
+      queryField = "staffId";
+      queryValue = staffId.toString().trim().toUpperCase();
+    } else if (mobile && mobile.toString().trim() !== "") {
+      queryField = "mobile";
+      queryValue = mobile.toString().trim();
+    } else {
+      return res.status(400).json({ msg: "Staff ID ya Mobile chahiye" });
+    }
+
+    console.log(`Login attempt: ${queryField} = ${queryValue}`);
+
+    const snap = await db.ref("StaffPool").orderByChild(queryField).equalTo(queryValue).once("value");
+    
+    if(!snap.exists()) {
+      return res.status(404).json({ msg: `${queryField} nahi mila: ${queryValue}` });
+    }
     
     let staffData = null;
     snap.forEach(child => { staffData = child.val(); });
 
-    if(staffData.status !== "APPROVED") return res.status(403).json({ msg: "Admin ne abhi Approve nahi kiya. Status: " + staffData.status });
+    if(staffData.status !== "APPROVED") {
+      return res.status(403).json({ msg: "Admin ne abhi Approve nahi kiya. Status: " + staffData.status });
+    }
 
-    const match = await bcrypt.compare(pin, staffData.staffPinHash);
+    const match = await bcrypt.compare(pin.toString(), staffData.staffPinHash);
     if(!match) return res.status(401).json({ msg: "Galat PIN" });
 
-    const token = jwt.sign({ staffId: staffData.staffId }, "BARBERJI_STAFF_SECRET_2026", { expiresIn: "7d" });
-    res.json({ token, staff: staffData });
+    const token = jwt.sign({ staffId: staffData.staffId, mobile: staffData.mobile, permanentId: staffData.permanentId }, "BARBERJI_STAFF_SECRET_2026", { expiresIn: "7d" });
+    
+    res.json({ 
+      success: true,
+      token, 
+      data: staffData,
+      staff: staffData 
+    });
 
-  } catch(err){ res.status(500).json({ msg: err.message }); }
+  } catch(err){ 
+    console.error("LOGIN ERROR:", err);
+    res.status(500).json({ msg: err.message }); 
+  }
 };
 
-// ===== NEW 1 - PENDING STATUS CHECK (App ke liye) =====
+// ===== STATUS CHECK (App ke liye) =====
 exports.getStatus = async (req, res) => {
   try {
     const mobile = req.query.mobile || req.query.aadhaar;
     if(!mobile) return res.status(400).json({ status: "MOBILE_REQUIRED" });
 
-    let snap = await db.ref("StaffPool").orderByChild("mobile").equalTo(mobile).once("value");
+    let snap = await db.ref("StaffPool").orderByChild("mobile").equalTo(mobile.toString().trim()).once("value");
     if(!snap.exists()){
-      snap = await db.ref("StaffPool").orderByChild("aadhaarNumber").equalTo(mobile).once("value");
+      snap = await db.ref("StaffPool").orderByChild("aadhaarNumber").equalTo(mobile.toString().trim()).once("value");
     }
     if(!snap.exists()) return res.json({ status: "NOT_FOUND" });
 
@@ -91,7 +136,7 @@ exports.getStatus = async (req, res) => {
   } catch(err){ res.status(500).json({ status: "ERROR", msg: err.message }); }
 };
 
-// ===== NEW 2 - ADMIN: PENDING LIST =====
+// ===== ADMIN: PENDING LIST =====
 exports.getPendingList = async (req, res) => {
   try {
     const snap = await db.ref("StaffPool").orderByChild("status").equalTo("PENDING").once("value");
@@ -102,13 +147,12 @@ exports.getPendingList = async (req, res) => {
   } catch(err){ res.status(500).json({ msg: err.message }); }
 };
 
-// ===== NEW 3 - ADMIN: APPROVE + STAFF ID GENERATE =====
+// ===== ADMIN: APPROVE + STAFF ID GENERATE =====
 exports.approveStaff = async (req, res) => {
   try {
     const { permanentId } = req.body;
     if(!permanentId) return res.status(400).json({ msg: "permanentId chahiye" });
 
-    // Staff Count karke ID banao
     const counterRef = db.ref("Counters/StaffCounter");
     const counterSnap = await counterRef.once("value");
     let count = counterSnap.val() || 1000;
@@ -128,10 +172,10 @@ exports.approveStaff = async (req, res) => {
   } catch(err){ res.status(500).json({ msg: err.message }); }
 };
 
-// ===== NEW 4 - ADMIN: REJECT / CORRECTION =====
+// ===== ADMIN: REJECT / CORRECTION =====
 exports.actionStaff = async (req, res) => {
   try {
-    const { permanentId, action, note } = req.body; // action = REJECTED or CORRECTION
+    const { permanentId, action, note } = req.body;
     if(!permanentId || !action) return res.status(400).json({ msg: "Data missing" });
 
     await db.ref("StaffPool").child(permanentId).update({
