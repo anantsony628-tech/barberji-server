@@ -6,6 +6,8 @@ const ctrl = require("./staffController");
 router.post("/register", ctrl.register);
 router.post("/login", ctrl.login);
 router.get("/status", ctrl.getStatus); // <-- PENDING page ke liye naya
+router.post("/updateLocation", ctrl.updateLocation);
+router.post("/update-location", ctrl.updateLocation);
 
 // ===== ADMIN SIDE - Alag Routes =====
 router.get("/admin/pending", ctrl.getPendingList);
