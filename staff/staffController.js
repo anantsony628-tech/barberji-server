@@ -187,3 +187,53 @@ exports.actionStaff = async (req, res) => {
 
   } catch(err){ res.status(500).json({ msg: err.message }); }
 };
+
+// ===== ONLINE / LOCATION UPDATE - 404 FIX =====
+exports.updateLocation = async (req, res) => {
+  try {
+    const { staffId, mobile, lat, lng, isOnline, gender, age } = req.body;
+    console.log("updateLocation:", staffId, mobile, lat, lng, isOnline);
+
+    if (!staffId && !mobile) {
+      return res.status(400).json({ success: false, msg: "staffId ya mobile chahiye" });
+    }
+
+    let key = null;
+    let staffData = null;
+
+    // 1. staffId se dhoondho
+    if (staffId) {
+      const snap = await db.ref("StaffPool").orderByChild("staffId").equalTo(staffId.toString().trim().toUpperCase()).once("value");
+      if (snap.exists()) {
+        snap.forEach(child => { key = child.key; staffData = child.val(); });
+      }
+    }
+    // 2. Nahi mila toh mobile se dhoondho
+    if (!key && mobile) {
+      const snap = await db.ref("StaffPool").orderByChild("mobile").equalTo(mobile.toString().trim()).once("value");
+      if (snap.exists()) {
+        snap.forEach(child => { key = child.key; staffData = child.val(); });
+      }
+    }
+
+    if (!key) {
+      return res.status(404).json({ success: false, msg: "Staff not found" });
+    }
+
+    await db.ref("StaffPool").child(key).update({
+      lat: lat || 0,
+      lng: lng || 0,
+      latitude: lat || 0,
+      longitude: lng || 0,
+      isOnline: isOnline === true || isOnline === "true",
+      lastUpdated: Date.now(),
+      ...(gender ? { gender } : {}),
+      ...(age ? { age } : {})
+    });
+
+    return res.json({ success: true, message: "Location updated" });
+  } catch (err) {
+    console.log("updateLocation error:", err.message);
+    return res.status(500).json({ success: false, msg: err.message });
+  }
+};
