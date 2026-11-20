@@ -12,6 +12,7 @@ router.post("/update-location", ctrl.updateLocation);
 // ===== ADMIN SIDE - Alag Routes =====
 router.get("/admin/pending", ctrl.getPendingList);
 router.post("/admin/approve", ctrl.approveStaff);
+router.get("/admin/approved", ctrl.getApprovedList);
 router.post("/admin/action", ctrl.actionStaff);
 
 module.exports = router;
