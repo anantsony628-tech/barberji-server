@@ -237,3 +237,29 @@ exports.updateLocation = async (req, res) => {
     return res.status(500).json({ success: false, msg: err.message });
   }
 };
+// ===== ADMIN: APPROVED + ONLINE LIST - Home Booking Assign ke liye =====
+exports.getApprovedList = async (req, res) => {
+  try {
+    const snap = await db.ref("StaffPool").orderByChild("status").equalTo("APPROVED").once("value");
+    const list = [];
+    snap.forEach(child => {
+      const s = child.val();
+      // Sirf zaroori data bhejo - Aadhaar / Bank mat bhejo
+      list.push({
+        permanentId: s.permanentId || child.key,
+        staffId: s.staffId || "",
+        name: s.name || "",
+        mobile: s.mobile || "",
+        profilePhotoUrl: s.profilePhotoUrl || "",
+        skills: s.skills || "",
+        isOnline: s.isOnline || false,
+        lat: s.lat || 0,
+        lng: s.lng || 0,
+        lastUpdated: s.lastUpdated || 0
+      });
+    });
+    // Online wale upar
+    list.sort((a,b) => (b.isOnline === true) - (a.isOnline === true));
+    res.json(list);
+  } catch(err){ res.status(500).json({ msg: err.message }); }
+};
