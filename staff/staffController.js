@@ -44,9 +44,15 @@ exports.register = async (req, res) => {
       aadhaarBackUrl: aadhaarBackUrl || "",
       panNumber: panNumber || "",
       panPhotoUrl: panPhotoUrl || "",
-      status: "PENDING",
+            status: "PENDING",
       correctionNote: "",
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      gender: req.body.gender || "",
+      age: req.body.age || "",
+      isAvailable: true,
+      isOnline: false,
+      lat: 0,
+      lng: 0
     };
 
     await db.ref("StaffPool").child(permanentId).set(data);
@@ -220,12 +226,13 @@ exports.updateLocation = async (req, res) => {
       return res.status(404).json({ success: false, msg: "Staff not found" });
     }
 
-    await db.ref("StaffPool").child(key).update({
+        await db.ref("StaffPool").child(key).update({
       lat: lat || 0,
       lng: lng || 0,
       latitude: lat || 0,
       longitude: lng || 0,
       isOnline: isOnline === true || isOnline === "true",
+      isAvailable: req.body.isAvailable !== false,
       lastUpdated: Date.now(),
       ...(gender ? { gender } : {}),
       ...(age ? { age } : {})
@@ -262,4 +269,77 @@ exports.getApprovedList = async (req, res) => {
     list.sort((a,b) => (b.isOnline === true) - (a.isOnline === true));
     res.json(list);
   } catch(err){ res.status(500).json({ msg: err.message }); }
+};
+// ===== HOME BOOKING AUTO-ASSIGN - SERVER =====
+function getDistanceKm(lat1, lon1, lat2, lon2) {
+  if (!lat2 || lat2 === 0) return 999999;
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  return R * 2 * Math.asin(Math.sqrt(a));
+}
+
+async function assignToNearestStaff(bookingId) {
+  const bookSnap = await db.ref(`HomeServiceBookings/${bookingId}`).once("value");
+  const book = bookSnap.val();
+  if (!book) return;
+  const cur = book.status || "";
+  if (cur === "ACCEPTED" || cur === "ON_THE_WAY" || cur === "COMPLETED" || cur === "CANCELLED") return;
+  const custLat = book.custLat || book.lat || 0;
+  const custLng = book.custLng || book.lng || 0;
+  const gender = book.gender || book.customerGender || "ANY";
+  const rejectedBy = book.rejectedBy || {};
+  const staffSnap = await db.ref("StaffPool").once("value");
+  let candidates = [];
+  staffSnap.forEach((st) => {
+    const s = st.val() || {};
+    const key = st.key;
+    if (s.status !== "APPROVED") return;
+    if (rejectedBy[key]) return;
+    if (s.staffId && rejectedBy[s.staffId]) return;
+    const sg = (s.gender || "").toUpperCase();
+    if (gender === "FEMALE" && sg === "MALE") return;
+    if (gender === "MALE" && sg === "FEMALE") return;
+    if (s.isAvailable === false) return;
+    if (s.isOnline === false) return;
+    if (s.isAvailable === undefined && s.isOnline === undefined) return;
+    candidates.push({ key, data: s, dist: getDistanceKm(custLat, custLng, s.lat || 0, s.lng || 0) });
+  });
+  candidates.sort((a,b) => a.dist - b.dist);
+  if (candidates.length === 0) {
+    await db.ref(`HomeServiceBookings/${bookingId}/status`).set("SEARCHING");
+    return;
+  }
+  const first = candidates[0];
+  const staffId = first.data.staffId || first.key;
+  await db.ref(`HomeServiceBookings/${bookingId}`).update({
+    assignedStaffId: staffId,
+    assignedStaffName: first.data.name || "",
+    assignedStaffMobile: first.data.mobile || "",
+    assignedStaffPhotoUrl: first.data.profilePhotoUrl || "",
+    assignedAt: Date.now(),
+    status: "ASSIGNED"
+  });
+  await db.ref(`HomeServiceBookings/${bookingId}/offeredTo/${staffId}`).set(true);
+}
+
+exports.onNewHomeBooking = async (req, res) => {
+  try {
+    const { bookingId } = req.body;
+    if (!bookingId) return res.status(400).json({ msg: "bookingId chahiye" });
+    await assignToNearestStaff(bookingId);
+    res.json({ success: true, msg: "Assigned" });
+  } catch(e){ res.status(500).json({ msg: e.message }); }
+};
+
+exports.onStaffRejectBooking = async (req, res) => {
+  try {
+    const { bookingId, staffId } = req.body;
+    if (staffId) await db.ref(`HomeServiceBookings/${bookingId}/rejectedBy/${staffId}`).set(true);
+    await assignToNearestStaff(bookingId);
+    res.json({ success: true });
+  } catch(e){ res.status(500).json({ msg: e.message }); }
 };
